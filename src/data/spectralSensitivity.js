@@ -16,7 +16,7 @@
 
 // Gaussian spectral sensitivity function
 // Returns sensitivity (0-1) at wavelength λ given peak λmax and bandwidth
-function gaussianSensitivity(lambda, lambdaMax, bandwidth = 50) {
+export function gaussianSensitivity(lambda, lambdaMax, bandwidth = 50) {
     const sigma = bandwidth / 2.355; // Convert FWHM to standard deviation
     const exponent = -Math.pow(lambda - lambdaMax, 2) / (2 * sigma * sigma);
     return Math.exp(exponent);
