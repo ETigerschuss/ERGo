@@ -35,4 +35,16 @@ const config = {
 
 const game = new Phaser.Game(config);
 
+// Export game instance for debugging
+if (typeof window !== 'undefined') {
+    window.ERGoGame = game;
+}
+
+// Load debug tools in development mode
+if (import.meta.env.DEV) {
+    import('./utils/debug.js').then(debug => {
+        console.log('Debug tools loaded');
+    });
+}
+
 export default game;
