@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERGo! - Debug Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #040218;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        #status { padding: 20px; background: #222; margin: 10px 0; }
+        .error { color: #ff0000; }
+        .success { color: #00ff00; }
+    </style>
+</head>
+<body>
+    <h1>ERGo! Debug Test</h1>
+    <div id="status">Loading...</div>
+    <div id="game-container"></div>
+    
+    <script src="./phaser.js"></script>
+    <script type="module">
+        const status = document.getElementById('status');
+        
+        // Test 1: Phaser loaded?
+        if (typeof Phaser !== 'undefined') {
+            status.innerHTML += '<div class="success">✓ Phaser loaded! Version: ' + Phaser.VERSION + '</div>';
+        } else {
+            status.innerHTML += '<div class="error">✗ Phaser not loaded!</div>';
+        }
+        
+        // Test 2: Try to import insect database
+        try {
+            const { INSECT_DATABASE } = await import('./src/data/insectDatabase.js');
+            status.innerHTML += '<div class="success">✓ Insect database loaded! Found ' + Object.keys(INSECT_DATABASE).length + ' insects</div>';
+        } catch(e) {
+            status.innerHTML += '<div class="error">✗ Error loading insect database: ' + e.message + '</div>';
+        }
+        
+        // Test 3: Try to import InsectSelection scene
+        try {
+            const { InsectSelection } = await import('./src/scenes/InsectSelection.js');
+            status.innerHTML += '<div class="success">✓ InsectSelection scene loaded!</div>';
+        } catch(e) {
+            status.innerHTML += '<div class="error">✗ Error loading InsectSelection: ' + e.message + '</div>';
+        }
+        
+        // Test 4: Try to import DefogGame scene
+        try {
+            const { DefogGame } = await import('./src/scenes/DefogGameSimple.js');
+            status.innerHTML += '<div class="success">✓ DefogGame scene loaded!</div>';
+        } catch(e) {
+            status.innerHTML += '<div class="error">✗ Error loading DefogGame: ' + e.message + '</div>';
+        }
+        
+        // Test 5: Try to start Phaser
+        try {
+            const { InsectSelection } = await import('./src/scenes/InsectSelection.js');
+            const { DefogGame } = await import('./src/scenes/DefogGameSimple.js');
+            
+            const config = {
+                type: Phaser.AUTO,
+                parent: 'game-container',
+                width: 1280,
+                height: 720,
+                backgroundColor: '#000000',
+                scene: [InsectSelection, DefogGame]
+            };
+            
+            const game = new Phaser.Game(config);
+            status.innerHTML += '<div class="success">✓ Phaser game started!</div>';
+        } catch(e) {
+            status.innerHTML += '<div class="error">✗ Error starting game: ' + e.message + '</div>';
+            console.error('Full error:', e);
+        }
+    </script>
+</body>
+</html>
