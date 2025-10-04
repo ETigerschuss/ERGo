@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERGo! Diagnostic</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #000;
+            color: #0f0;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 { color: #fff; }
+        .test { 
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #333;
+        }
+        .pass { background: #004400; }
+        .fail { background: #440000; color: #f00; }
+        .info { background: #003344; color: #0ff; }
+        pre { 
+            background: #111;
+            padding: 10px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐛 ERGo! Deployment Diagnostic</h1>
+    <div id="results"></div>
+    
+    <script>
+        const results = document.getElementById('results');
+        
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+        }
+        
+        log('🔍 Starting diagnostic tests...', 'info');
+        
+        // Test 1: Check if we can access the page
+        log('✅ TEST 1: HTML loaded successfully', 'pass');
+        
+        // Test 2: Check location
+        log(`📍 TEST 2: Current URL<br><pre>${window.location.href}</pre>`, 'info');
+        
+        // Test 3: Try to load Phaser
+        log('⏳ TEST 3: Loading phaser.js...', 'info');
+        const phaserScript = document.createElement('script');
+        phaserScript.src = './phaser.js';
+        phaserScript.onload = () => {
+            log(`✅ TEST 3: phaser.js loaded successfully<br>Phaser version: ${Phaser.VERSION || 'unknown'}`, 'pass');
+            
+            // Test 4: Try to load main.js
+            log('⏳ TEST 4: Loading src/main.js...', 'info');
+            const mainScript = document.createElement('script');
+            mainScript.type = 'module';
+            mainScript.src = './src/main.js';
+            mainScript.onload = () => {
+                log('✅ TEST 4: src/main.js loaded successfully', 'pass');
+                log('🎮 All tests passed! Game should work. Redirecting in 3 seconds...', 'pass');
+                setTimeout(() => {
+                    window.location.href = './index.html';
+                }, 3000);
+            };
+            mainScript.onerror = (e) => {
+                log(`❌ TEST 4 FAILED: Could not load src/main.js<br><pre>${e}</pre>`, 'fail');
+                checkModuleSupport();
+            };
+            document.body.appendChild(mainScript);
+        };
+        phaserScript.onerror = (e) => {
+            log(`❌ TEST 3 FAILED: Could not load phaser.js<br>Error: ${e.message || 'Unknown error'}`, 'fail');
+            log(`💡 Possible causes:<br>
+                - File not uploaded to GitHub<br>
+                - File too large (>100MB GitHub limit)<br>
+                - Network error<br>
+                - CORS issue`, 'info');
+        };
+        document.body.appendChild(phaserScript);
+        
+        // Test 5: Check module support
+        function checkModuleSupport() {
+            log('⏳ TEST 5: Checking ES6 module support...', 'info');
+            if (typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+                log('✅ TEST 5: Browser supports ES6 modules', 'pass');
+            } else {
+                log('❌ TEST 5: Browser does NOT support ES6 modules<br>Use Chrome 61+, Safari 11+, Firefox 60+, or Edge 16+', 'fail');
+            }
+        }
+        
+        // Test 6: Check for errors
+        window.addEventListener('error', (e) => {
+            log(`❌ ERROR CAUGHT:<br><pre>${e.message}\nFile: ${e.filename}\nLine: ${e.lineno}</pre>`, 'fail');
+        });
+        
+        // Test 7: Check assets
+        log('⏳ TEST 7: Checking assets folder...', 'info');
+        fetch('./assets/space.png')
+            .then(response => {
+                if (response.ok) {
+                    log('✅ TEST 7: assets/space.png accessible', 'pass');
+                } else {
+                    log(`⚠️ TEST 7: assets/space.png returned ${response.status}`, 'fail');
+                }
+            })
+            .catch(e => {
+                log(`⚠️ TEST 7: Could not fetch assets/space.png<br>${e.message}`, 'fail');
+            });
+    </script>
+</body>
+</html>
