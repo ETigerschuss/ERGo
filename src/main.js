@@ -1,6 +1,6 @@
 import { Start } from './scenes/Start.js';
 import { DefogGame } from './scenes/DefogGameAdvanced.js';  // Advanced version: waypoints, multi-select, corner controls
-import { InsectSelection } from './scenes/InsectSelection.js';  // Using insect selection scene
+import { InsectSelection } from './scenes/InsectSelectionEnhanced.js';  // Enhanced version with spectral sensitivity
 
 const config = {
     type: Phaser.AUTO,
