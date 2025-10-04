@@ -1,5 +1,4 @@
 import { INSECT_DATABASE, SUPERFAMILIES, SUPERFAMILY_EMOJI, COLOR_CHANNELS } from '../data/insectDatabaseReal.js';
-import { SpectralVisualization } from '../ui/SpectralVisualization.js';
 
 export class InsectSelection extends Phaser.Scene {
     constructor() {
@@ -235,38 +234,63 @@ export class InsectSelection extends Phaser.Scene {
     }
 
     createSpectralPreview(width, y) {
-        // Beautiful wavelength spectrum visualization
-        const spectrumWidth = 600;
-        const spectrumHeight = 120;
-        const spectrumX = width / 2 - spectrumWidth / 2;
-        const spectrumY = y - 80;
-        
-        // Title
-        this.add.text(width / 2, spectrumY - 20, '🌈 Team Spectral Coverage', {
-            fontSize: '16px',
+        // Show which color channels will be covered by selected insects
+        this.add.text(width / 2, y - 20, 'Team Coverage:', {
+            fontSize: '14px',
             fontFamily: 'Arial, sans-serif',
-            color: '#ffcc00',
-            fontStyle: 'bold'
+            color: '#aaaaaa'
         }).setOrigin(0.5);
         
-        // Create spectral visualization
-        this.spectralViz = new SpectralVisualization(
-            this,
-            spectrumX,
-            spectrumY,
-            spectrumWidth,
-            spectrumHeight
-        );
+        const channels = ['UV', 'B', 'G', 'R'];
+        const startX = width / 2 - 150;
         
-        // Initial empty state
+        this.spectralPreview = {};
+        
+        channels.forEach((channel, i) => {
+            const x = startX + i * 80;
+            
+            // Channel circle
+            const circle = this.add.circle(x, y, 12, 0x333333);
+            circle.setStrokeStyle(2, COLOR_CHANNELS[channel].color);
+            
+            // Channel label
+            this.add.text(x, y + 20, channel, {
+                fontSize: '11px',
+                fontFamily: 'Arial, sans-serif',
+                color: '#888888'
+            }).setOrigin(0.5);
+            
+            this.spectralPreview[channel] = circle;
+        });
+        
         this.updateSpectralPreview();
     }
 
     updateSpectralPreview() {
-        if (!this.spectralViz) return;
+        // Check which channels are covered by currently selected insects
+        const coverage = {
+            'UV': false,
+            'B': false,
+            'G': false,
+            'R': false
+        };
         
-        // Update with currently selected insects
-        this.spectralViz.updateInsects(this.selectedInsects);
+        this.selectedInsects.forEach(insectId => {
+            const insectData = INSECT_DATABASE[insectId];
+            insectData.colorSpectrum.forEach(channel => {
+                coverage[channel] = true;
+            });
+        });
+        
+        // Update visual indicators
+        Object.keys(coverage).forEach(channel => {
+            const circle = this.spectralPreview[channel];
+            if (coverage[channel]) {
+                circle.setFillStyle(COLOR_CHANNELS[channel].color, 0.7);
+            } else {
+                circle.setFillStyle(0x333333);
+            }
+        });
     }
 
     updateStartButton() {
