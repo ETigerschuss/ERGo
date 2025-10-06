@@ -1,14 +1,14 @@
-﻿import { INSECT_DATABASE, SUPERFAMILIES, SUPERFAMILY_EMOJI, COLOR_CHANNELS } from '../data/insectDatabaseReal.js';
+import { INSECT_DATABASE, SUPERFAMILIES, SUPERFAMILY_EMOJI, COLOR_CHANNELS } from '../data/insectDatabaseReal.js';
 
 export class InsectSelection extends Phaser.Scene {
     constructor() {
         super({ key: 'InsectSelection' });
-        this.selectedInsects = [];
-        this.selectedByFamily = {}; // Track which insect is selected per family
+        this.selectedFamily = null;
+        this.selectedInsect = null;
     }
 
     create() {
-        console.log("=== InsectSelection CREATE (Enhanced) ===");
+        console.log("=== InsectSelection CREATE (v0.02 - Progression) ===");
         
         const { width, height } = this.cameras.main;
 
@@ -17,7 +17,7 @@ export class InsectSelection extends Phaser.Scene {
         graphics.fillGradientStyle(0x1a1a2e, 0x1a1a2e, 0x0f3460, 0x0f3460, 1);
         graphics.fillRect(0, 0, width, height);
 
-        // Title with shadow
+        // Title
         this.add.text(width / 2, 50, '🔬 ERGo! - Insect Vision Explorer 🔬', {
             fontSize: '42px',
             fontFamily: 'Arial, sans-serif',
@@ -28,71 +28,238 @@ export class InsectSelection extends Phaser.Scene {
         }).setOrigin(0.5);
         
         // Subtitle
-        this.add.text(width / 2, 95, 'Select ONE insect from EACH family (4 total)', {
-            fontSize: '20px',
-            fontFamily: 'Arial, sans-serif',
-            color: '#ffcc00',
-            fontStyle: 'bold'
-        }).setOrigin(0.5);
-        
-        // Spectral coverage hint
-        this.add.text(width / 2, 120, '🌈 Goal: Cover all color channels (UV-Blue-Green-Red) to see the flower!', {
-            fontSize: '14px',
+        this.add.text(width / 2, 95, 'v0.02 - Progression Mode', {
+            fontSize: '18px',
             fontFamily: 'Arial, sans-serif',
             color: '#4ecdc4'
         }).setOrigin(0.5);
 
-        // Create grid for superfamilies
-        const columnWidth = width / 4;
-        const headerY = 150;
-        const cardsStartY = 200;
+        // Show family selection screen
+        this.showFamilySelection();
+    }
 
-        SUPERFAMILIES.forEach((superfamily, colIndex) => {
-            const columnX = columnWidth * (colIndex + 0.5);
-            
-            // Superfamily header with emoji - positioned above cards
-            const emoji = SUPERFAMILY_EMOJI[superfamily];
-            const headerText = this.add.text(columnX, headerY, `${emoji} ${superfamily}`, {
-                fontSize: '20px',
-                fontFamily: 'Arial, sans-serif',
-                color: '#ffcc00',
-                fontStyle: 'bold',
-                stroke: '#000000',
-                strokeThickness: 2
-            }).setOrigin(0.5).setDepth(1000);
-            
-            // Store header reference for updating selection status
-            if (!this.familyHeaders) this.familyHeaders = {};
-            this.familyHeaders[superfamily] = headerText;
+    showFamilySelection() {
+        const { width, height } = this.cameras.main;
+        
+        // Instruction
+        this.add.text(width / 2, 140, 'Select a Superfamily:', {
+            fontSize: '24px',
+            fontFamily: 'Arial, sans-serif',
+            color: '#ffffff',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
 
-            // Get insects in this superfamily
-            const insects = this.getInsectsBySuperfamily(superfamily);
+        // Only Hymenoptera is unlocked
+        const unlockedFamily = 'Hymenoptera';
+        
+        // Create 4 family cards in a 2x2 grid
+        const spacing = 280;
+        const startX = width / 2 - spacing / 2;
+        const startY = height / 2;
+        
+        SUPERFAMILIES.forEach((superfamily, index) => {
+            const x = startX + (index % 2) * spacing;
+            const y = startY + Math.floor(index / 2) * 200;
+            const isUnlocked = superfamily === unlockedFamily;
             
-            insects.forEach((insect, rowIndex) => {
-                const cardY = cardsStartY + (rowIndex * 135);
-                this.createInsectCard(columnX, cardY, insect.id, insect);
-            });
+            this.createFamilyCard(x, y, superfamily, isUnlocked);
         });
+    }
 
-        // Start button with glow
-        const buttonY = height - 70;
-        const buttonWidth = 300;
-        const buttonHeight = 50;
+    createFamilyCard(x, y, superfamily, isUnlocked) {
+        const cardWidth = 240;
+        const cardHeight = 160;
         
-        this.startButton = this.add.rectangle(width / 2, buttonY, buttonWidth, buttonHeight, 0x555555, 0.8);
-        this.startButton.setStrokeStyle(3, 0x333333);
+        // Card background
+        const card = this.add.rectangle(x, y, cardWidth, cardHeight, 
+            isUnlocked ? 0x16213e : 0x0a0a0a, 
+            isUnlocked ? 0.95 : 0.5
+        );
+        card.setStrokeStyle(3, isUnlocked ? 0x00ff00 : 0x333333);
         
-        this.startButtonText = this.add.text(width / 2, buttonY, 'Select one from each family', {
+        // Emoji
+        const emoji = SUPERFAMILY_EMOJI[superfamily];
+        this.add.text(x, y - 40, emoji, {
+            fontSize: '64px'
+        }).setOrigin(0.5).setAlpha(isUnlocked ? 1 : 0.3);
+        
+        // Family name
+        this.add.text(x, y + 30, superfamily, {
             fontSize: '18px',
             fontFamily: 'Arial, sans-serif',
-            color: '#888888',
+            color: isUnlocked ? '#ffcc00' : '#666666',
             fontStyle: 'bold'
         }).setOrigin(0.5);
         
-        this.startButton.on('pointerdown', () => this.startGame());
+        // Lock icon or click prompt
+        if (!isUnlocked) {
+            this.add.text(x, y + 55, '🔒 Locked', {
+                fontSize: '16px',
+                fontFamily: 'Arial, sans-serif',
+                color: '#666666'
+            }).setOrigin(0.5);
+        } else {
+            this.add.text(x, y + 55, 'Click to select', {
+                fontSize: '14px',
+                fontFamily: 'Arial, sans-serif',
+                color: '#4ecdc4'
+            }).setOrigin(0.5);
+            
+            // Make it interactive
+            card.setInteractive({ useHandCursor: true });
+            card.on('pointerover', () => card.setFillStyle(0x1f4068, 1));
+            card.on('pointerout', () => card.setFillStyle(0x16213e, 0.95));
+            card.on('pointerdown', () => {
+                this.selectedFamily = superfamily;
+                this.showSpeciesSelection();
+            });
+        }
+    }
+
+    showSpeciesSelection() {
+        // Clear the screen
+        this.children.removeAll();
         
-        // Create spectral coverage preview above button
-        this.createSpectralPreview(width, buttonY - 50);
+        const { width, height } = this.cameras.main;
+
+        // Background gradient
+        const graphics = this.add.graphics();
+        graphics.fillGradientStyle(0x1a1a2e, 0x1a1a2e, 0x0f3460, 0x0f3460, 1);
+        graphics.fillRect(0, 0, width, height);
+
+        // Title
+        const emoji = SUPERFAMILY_EMOJI[this.selectedFamily];
+        this.add.text(width / 2, 50, `${emoji} ${this.selectedFamily}`, {
+            fontSize: '36px',
+            fontFamily: 'Arial, sans-serif',
+            color: '#ffcc00',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+        
+        // Instruction
+        this.add.text(width / 2, 100, 'Select a Species:', {
+            fontSize: '20px',
+            fontFamily: 'Arial, sans-serif',
+            color: '#ffffff'
+        }).setOrigin(0.5);
+
+        // Get all species in this family
+        const species = this.getInsectsBySuperfamily(this.selectedFamily);
+        
+        // Only ant is unlocked
+        const unlockedSpecies = 'ant';
+        
+        // Create species cards in a row
+        const spacing = 280;
+        const startX = width / 2 - (spacing * (species.length - 1)) / 2;
+        const y = height / 2 + 20;
+        
+        species.forEach((insect, index) => {
+            const x = startX + index * spacing;
+            const isUnlocked = insect.id === unlockedSpecies;
+            this.createSpeciesCard(x, y, insect, isUnlocked);
+        });
+
+        // Back button
+        const backBtn = this.add.text(40, height - 40, '← Back', {
+            fontSize: '20px',
+            fontFamily: 'Arial, sans-serif',
+            color: '#4ecdc4',
+            backgroundColor: '#1a1a2e',
+            padding: { x: 15, y: 8 }
+        }).setOrigin(0, 1).setInteractive({ useHandCursor: true });
+        
+        backBtn.on('pointerover', () => backBtn.setColor('#00ffff'));
+        backBtn.on('pointerout', () => backBtn.setColor('#4ecdc4'));
+        backBtn.on('pointerdown', () => {
+            this.children.removeAll();
+            this.create();
+        });
+    }
+
+    createSpeciesCard(x, y, insect, isUnlocked) {
+        const cardWidth = 260;
+        const cardHeight = 320;
+        
+        // Card background
+        const card = this.add.rectangle(x, y, cardWidth, cardHeight, 
+            isUnlocked ? 0x16213e : 0x0a0a0a, 
+            isUnlocked ? 0.95 : 0.5
+        );
+        card.setStrokeStyle(3, isUnlocked ? 0x00ff00 : 0x333333);
+        
+        // Emoji (larger for species)
+        const speciesEmojis = {
+            'ant': '🐜',
+            'honeybee': '🐝',
+            'bumblebee': '🐝',
+            'hornet': '🐝'
+        };
+        const emoji = speciesEmojis[insect.id] || '🐛';
+        this.add.text(x, y - 100, emoji, {
+            fontSize: '72px'
+        }).setOrigin(0.5).setAlpha(isUnlocked ? 1 : 0.3);
+        
+        // Name
+        this.add.text(x, y - 20, insect.name, {
+            fontSize: '18px',
+            fontFamily: 'Arial, sans-serif',
+            color: isUnlocked ? '#ffffff' : '#666666',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+        
+        // Scientific name
+        this.add.text(x, y + 5, insect.scientificName, {
+            fontSize: '12px',
+            fontFamily: 'Arial, sans-serif',
+            color: isUnlocked ? '#aaaaaa' : '#444444',
+            fontStyle: 'italic'
+        }).setOrigin(0.5);
+        
+        // Stats
+        this.add.text(x, y + 35, `👁️ ${insect.ommatidia?.toLocaleString() || '?'} ommatidia`, {
+            fontSize: '12px',
+            fontFamily: 'Arial, sans-serif',
+            color: isUnlocked ? '#4ecdc4' : '#444444'
+        }).setOrigin(0.5);
+        
+        this.add.text(x, y + 55, `⚡ Speed: ${insect.speed}/5`, {
+            fontSize: '12px',
+            fontFamily: 'Arial, sans-serif',
+            color: isUnlocked ? '#cccccc' : '#444444'
+        }).setOrigin(0.5);
+        
+        this.add.text(x, y + 75, `🌈 ${insect.colorSpectrum?.join('-') || 'Unknown'}`, {
+            fontSize: '12px',
+            fontFamily: 'Arial, sans-serif',
+            color: isUnlocked ? '#ff6b6b' : '#444444'
+        }).setOrigin(0.5);
+        
+        // Lock or Start button
+        if (!isUnlocked) {
+            this.add.text(x, y + 110, '🔒 Locked', {
+                fontSize: '18px',
+                fontFamily: 'Arial, sans-serif',
+                color: '#666666'
+            }).setOrigin(0.5);
+        } else {
+            const startBtn = this.add.text(x, y + 110, '▶ Start Game', {
+                fontSize: '18px',
+                fontFamily: 'Arial, sans-serif',
+                color: '#00ff00',
+                backgroundColor: '#1a1a2e',
+                padding: { x: 15, y: 8 }
+            }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            
+            startBtn.on('pointerover', () => startBtn.setColor('#00ffff'));
+            startBtn.on('pointerout', () => startBtn.setColor('#00ff00'));
+            startBtn.on('pointerdown', () => {
+                this.selectedInsect = insect.id;
+                this.startGame();
+            });
+        }
     }
 
     getInsectsBySuperfamily(superfamily) {
@@ -101,219 +268,10 @@ export class InsectSelection extends Phaser.Scene {
             .map(([key, insect]) => ({ id: key, ...insect }));
     }
 
-    createInsectCard(x, y, insectId, insectData) {
-        const cardWidth = 250;
-        const cardHeight = 115;
-        
-        // Card background - THIS is the interactive element
-        const card = this.add.rectangle(x, y, cardWidth, cardHeight, 0x16213e, 0.95);
-        card.setStrokeStyle(2, 0x0f3460);
-        card.setInteractive({ useHandCursor: true });
-        
-        // Store data on the card itself
-        card.insectId = insectId;
-        card.superfamily = insectData.superfamily;
-        
-        // Insect name
-        this.add.text(x, y - 38, insectData.name, {
-            fontSize: '15px',
-            fontFamily: 'Arial, sans-serif',
-            color: '#ffffff',
-            fontStyle: 'bold'
-        }).setOrigin(0.5);
-        
-        // Scientific name
-        this.add.text(x, y - 22, insectData.scientificName, {
-            fontSize: '11px',
-            fontFamily: 'Arial, sans-serif',
-            color: '#aaaaaa',
-            fontStyle: 'italic'
-        }).setOrigin(0.5);
-        
-        // Ommatidia count
-        this.add.text(x, y - 3, `👁️ ${insectData.ommatidia.toLocaleString()} ommatidia`, {
-            fontSize: '12px',
-            fontFamily: 'Arial, sans-serif',
-            color: '#4ecdc4',
-            fontStyle: 'bold'
-        }).setOrigin(0.5);
-        
-        // Size and speed
-        this.add.text(x, y + 13, `📏 ${insectData.size} | ⚡ Speed: ${insectData.speed}/5`, {
-            fontSize: '10px',
-            fontFamily: 'Arial, sans-serif',
-            color: '#cccccc'
-        }).setOrigin(0.5);
-        
-        // Color vision spectrum
-        this.add.text(x, y + 27, `🌈 Vision: ${insectData.colorSpectrum.join('-')}`, {
-            fontSize: '10px',
-            fontFamily: 'Arial, sans-serif',
-            color: '#ff6b6b'
-        }).setOrigin(0.5);
-        
-        // iNaturalist observations
-        if (insectData.iNaturalist) {
-            this.add.text(x, y + 41, `🔍 ${insectData.iNaturalist.toLocaleString()} obs`, {
-                fontSize: '9px',
-                fontFamily: 'Arial, sans-serif',
-                color: '#95e1d3'
-            }).setOrigin(0.5);
-        }
-
-        // Interaction handlers
-        card.on('pointerover', () => {
-            if (!this.selectedInsects.includes(insectId)) {
-                card.setFillStyle(0x1f4068, 1);
-            }
-        });
-        
-        card.on('pointerout', () => {
-            if (!this.selectedInsects.includes(insectId)) {
-                card.setFillStyle(0x16213e, 0.95);
-            }
-        });
-        
-        card.on('pointerdown', () => {
-            this.toggleInsectSelection(insectId, card);
-        });
-    }
-
-    toggleInsectSelection(insectId, card) {
-        const superfamily = card.superfamily;
-        const index = this.selectedInsects.indexOf(insectId);
-        
-        if (index > -1) {
-            // Deselect
-            this.selectedInsects.splice(index, 1);
-            delete this.selectedByFamily[superfamily];
-            card.setStrokeStyle(2, 0x0f3460);
-            card.setFillStyle(0x16213e, 0.95);
-        } else {
-            // Check if this family already has a selection
-            if (this.selectedByFamily[superfamily]) {
-                // Deselect the previous one from this family first
-                const prevIndex = this.selectedInsects.indexOf(this.selectedByFamily[superfamily]);
-                if (prevIndex > -1) {
-                    this.selectedInsects.splice(prevIndex, 1);
-                }
-            }
-            
-            // Select this one
-            this.selectedInsects.push(insectId);
-            this.selectedByFamily[superfamily] = insectId;
-            card.setStrokeStyle(5, 0x00ff00);
-            card.setFillStyle(0x1f4068, 1);
-        }
-        
-        // Update family headers to show selection status
-        this.updateFamilyHeaders();
-        
-        console.log('Selected insects:', this.selectedInsects);
-        console.log('By family:', this.selectedByFamily);
-        this.updateStartButton();
-    }
-
-    updateFamilyHeaders() {
-        SUPERFAMILIES.forEach(superfamily => {
-            const header = this.familyHeaders[superfamily];
-            const emoji = SUPERFAMILY_EMOJI[superfamily];
-            if (this.selectedByFamily[superfamily]) {
-                header.setText(`✅ ${emoji} ${superfamily}`);
-                header.setColor('#00ff00');
-            } else {
-                header.setText(`${emoji} ${superfamily}`);
-                header.setColor('#ffcc00');
-            }
-        });
-        
-        // Update spectral coverage preview
-        if (this.spectralPreview) {
-            this.updateSpectralPreview();
-        }
-    }
-
-    createSpectralPreview(width, y) {
-        // Show which color channels will be covered by selected insects
-        this.add.text(width / 2, y - 20, 'Spectral Coverage:', {
-            fontSize: '12px',
-            fontFamily: 'Arial, sans-serif',
-            color: '#aaaaaa'
-        }).setOrigin(0.5);
-        
-        const channels = ['UV', 'B', 'G', 'R'];
-        const startX = width / 2 - 150;
-        
-        this.spectralPreview = {};
-        
-        channels.forEach((channel, i) => {
-            const x = startX + i * 80;
-            
-            // Channel circle
-            const circle = this.add.circle(x, y, 10, 0x333333);
-            circle.setStrokeStyle(2, COLOR_CHANNELS[channel].color);
-            
-            // Channel label
-            this.add.text(x, y + 20, channel, {
-                fontSize: '10px',
-                fontFamily: 'Arial, sans-serif',
-                color: '#888888'
-            }).setOrigin(0.5);
-            
-            this.spectralPreview[channel] = circle;
-        });
-        
-        this.updateSpectralPreview();
-    }
-
-    updateSpectralPreview() {
-        // Check which channels are covered by currently selected insects
-        const coverage = {
-            'UV': false,
-            'B': false,
-            'G': false,
-            'R': false
-        };
-        
-        this.selectedInsects.forEach(insectId => {
-            const insectData = INSECT_DATABASE[insectId];
-            insectData.colorSpectrum.forEach(channel => {
-                coverage[channel] = true;
-            });
-        });
-        
-        // Update visual indicators
-        Object.keys(coverage).forEach(channel => {
-            const circle = this.spectralPreview[channel];
-            if (coverage[channel]) {
-                circle.setFillStyle(COLOR_CHANNELS[channel].color, 0.7);
-            } else {
-                circle.setFillStyle(0x333333);
-            }
-        });
-    }
-
-    updateStartButton() {
-        if (this.selectedInsects.length === 4) {
-            this.startButton.setFillStyle(0x00ff00, 1);
-            this.startButton.setStrokeStyle(4, 0x00aa00);
-            this.startButtonText.setColor('#000000');
-            this.startButtonText.setText('START GAME');
-            this.startButton.setInteractive({ useHandCursor: true });
-        } else {
-            const count = this.selectedInsects.length;
-            this.startButton.setFillStyle(0x555555, 0.8);
-            this.startButton.setStrokeStyle(3, 0x333333);
-            this.startButtonText.setColor('#888888');
-            this.startButtonText.setText(`Selected ${count}/4 - Pick one from each family`);
-            this.startButton.removeInteractive();
-        }
-    }
-
     startGame() {
-        if (this.selectedInsects.length === 4) {
-            console.log("Starting game with insects:", this.selectedInsects);
-            this.scene.start('DefogGame', { selectedInsects: this.selectedInsects });
-        }
+        console.log('Starting game with:', this.selectedInsect);
+        this.scene.start('DefogGame', { 
+            selectedInsects: [this.selectedInsect]
+        });
     }
 }

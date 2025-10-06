@@ -1,4 +1,5 @@
-import { Start } from './scenes/Start.js';
+import { SplashScreen } from './scenes/SplashScreen.js';  // Initial splash screen
+import { Start } from './scenes/StartNew.js';  // Family selection UI
 import { DefogGame } from './scenes/DefogGameAdvanced.js';  // Advanced version: waypoints, multi-select, corner controls
 import { InsectSelection } from './scenes/InsectSelectionEnhanced.js';  // Enhanced version with spectral sensitivity
 
@@ -12,7 +13,8 @@ const config = {
     backgroundColor: '#000000',
     pixelArt: false,
     scene: [
-        InsectSelection,  // Start with insect selection
+        SplashScreen,  // Start with ERGo splash screen
+        Start,         // Then family selection
         DefogGame
     ],
     scale: {
