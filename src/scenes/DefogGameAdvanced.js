@@ -31,7 +31,8 @@ export class DefogGame extends Phaser.Scene {
         this.familyProgression = {
             currentRound: 0,  // 0-3 for worst to best vision
             currentFamilyInRound: this.selectedFamilyIndex,  // Start with selected family!
-            spawnCountForCurrentSpecies: 0
+            spawnCountForCurrentSpecies: 0,
+            familiesCompletedInRound: 0  // Track how many families done in this round
         };
         
         // Species organized by VISION QUALITY (worst to best within each family)
@@ -41,13 +42,13 @@ export class DefogGame extends Phaser.Scene {
         // Round 2: Good vision (standard trichromats)
         // Round 3: Best vision (advanced trichromats/tetrachromats)
         this.speciesByFamily = [
-            ['ant', 'honeybee', 'bumblebee', 'hornet'],           // Hymenoptera: monochromat → UV+B+G trichromats (Index 0)
-            ['vinegar_fly', 'housefly', 'robber_fly', 'horsefly'],  // Diptera: simple → advanced (red vision) (Index 1)
-            ['hawk_moth', 'peacock', 'monarch', 'cabbage_white'], // Lepidoptera: trichromat → TETRACHROMAT! (Index 2)
-            ['stag_beetle', 'firefly', 'ladybug', 'rose_chafer']  // Coleoptera: monochromat → red vision (Index 3)
+            ['ant', 'honeybee', 'bumblebee', 'hornet'],              // Hymenoptera: mono→tri→tri+→tri++ (Index 0)
+            ['mosquito', 'vinegar_fly', 'housefly', 'horsefly'],     // Diptera: mono→hexa→penta→tri+red (Index 1)
+            ['hawk_moth', 'peacock', 'monarch', 'cabbage_white'],    // Lepidoptera: tri→tri+→tri++→tetra (Index 2)
+            ['stag_beetle', 'firefly', 'ladybug', 'rose_chafer']     // Coleoptera: mono→di→tri→tri+red (Index 3)
         ];
         
-        // Current species is the first from selected family
+        // Current species starts with the selected family's first species
         this.currentSpeciesId = this.speciesByFamily[this.selectedFamilyIndex][0];
         this.unlockedFamilies = [0, 1, 2, 3]; // All families unlocked from start
         
@@ -97,8 +98,8 @@ export class DefogGame extends Phaser.Scene {
         // Input handling
         this.setupInputHandlers();
         
-        // Start the first spawn timer (5 seconds)
-        this.startSpawnTimer(5);
+        // Start the first spawn timer (12 seconds to reduce lag)
+        this.startSpawnTimer(12);
 
         // Instructions
         this.add.text(width / 2, 20, 'Click insect to select, click elsewhere to set path', {
@@ -115,38 +116,45 @@ export class DefogGame extends Phaser.Scene {
     }
 
     createColorFogLayers(width, height) {
-        // NEW APPROACH: Create THREE separate RGB fog layers
-        // Each layer represents one color component that needs to be revealed
-        // Insects reveal proportional to their spectralWeights {r, g, b}
+        // TWO-LAYER APPROACH: B&W layer underneath, Color layer on top
+        // Monochromats (ants): Paint B&W on bottom layer
+        // Color insects: Paint colors on top layer
+        // This ensures colors ALWAYS stay on top!
         
         this.fogLayers = {};
         
-        // Red fog layer - revealed by insects with high r weight
-        const redFog = this.add.renderTexture(0, 0, width, height);
-        redFog.setOrigin(0, 0);
-        redFog.fill(0xff0044, 1.0);  // Vivid red-pink
-        redFog.setBlendMode(Phaser.BlendModes.MULTIPLY);
-        redFog.setDepth(100);
-        this.fogLayers.R = redFog;
+        // Hide the original image - we'll paint onto the revelation canvases instead
+        this.hiddenImage.setAlpha(0);
         
-        // Green fog layer - revealed by insects with high g weight
-        const greenFog = this.add.renderTexture(0, 0, width, height);
-        greenFog.setOrigin(0, 0);
-        greenFog.fill(0x00ff44, 1.0);  // Vivid cyan-green
-        greenFog.setBlendMode(Phaser.BlendModes.MULTIPLY);
-        greenFog.setDepth(101);
-        this.fogLayers.G = greenFog;
+        // Layer 1 (bottom): B&W revelation layer for monochromats
+        const bwCanvas = this.add.renderTexture(0, 0, width, height);
+        bwCanvas.setOrigin(0, 0);
+        bwCanvas.fill(0x000000, 1.0);  // Start black
+        bwCanvas.setDepth(199);  // Below color layer
+        this.bwCanvas = bwCanvas;
         
-        // Blue fog layer - revealed by insects with high b weight
-        const blueFog = this.add.renderTexture(0, 0, width, height);
-        blueFog.setOrigin(0, 0);
-        blueFog.fill(0x0088ff, 1.0);  // Vivid cyan-blue
-        blueFog.setBlendMode(Phaser.BlendModes.MULTIPLY);
-        blueFog.setDepth(102);
-        this.fogLayers.B = blueFog;
+        // Layer 2 (top): Color revelation layer for color-vision insects
+        const colorCanvas = this.add.renderTexture(0, 0, width, height);
+        colorCanvas.setOrigin(0, 0);
+        colorCanvas.fill(0x000000, 0);  // Start transparent!
+        colorCanvas.setDepth(200);  // On top of B&W layer
+        this.colorCanvas = colorCanvas;
         
-        console.log('Spectral fog layers created: R, G, B');
-        console.log('Insects will reveal based on their spectralWeights');
+        // Create an off-screen canvas to read pixel data from the image
+        // This is needed because Phaser doesn't have direct pixel access
+        this.imageCanvas = document.createElement('canvas');
+        this.imageCanvas.width = this.hiddenImage.width;
+        this.imageCanvas.height = this.hiddenImage.height;
+        this.imageContext = this.imageCanvas.getContext('2d', { willReadFrequently: true });
+        
+        // Draw the image onto the canvas so we can read pixels
+        const imageTexture = this.textures.get('hiddenImage').getSourceImage();
+        this.imageContext.drawImage(imageTexture, 0, 0);
+        
+        console.log('Two-layer revelation system created');
+        console.log('Layer 1 (depth 199): B&W for monochromats');
+        console.log('Layer 2 (depth 200): Colors for color-vision insects');
+        console.log('Colors will ALWAYS stay on top!');
     }
 
     createSpectrumIndicators(x, y, insectData) {
@@ -355,6 +363,7 @@ export class DefogGame extends Phaser.Scene {
             'bumblebee': '🐝',
             'hornet': '🐝',
             // Diptera
+            'mosquito': '🦟',
             'housefly': '🪰',
             'vinegar_fly': '🪰',
             'horsefly': '🪰',
@@ -363,6 +372,7 @@ export class DefogGame extends Phaser.Scene {
             'cabbage_white': '🦋',
             'hawk_moth': '🦋',
             'peacock': '🦋',
+            'peacock_butterfly': '🦋',  // Alternative name support
             'monarch': '🦋',
             // Coleoptera
             'ladybug': '🐞',
@@ -395,7 +405,7 @@ export class DefogGame extends Phaser.Scene {
         return Math.max(0.3, Math.min(3.0, scale)); // Clamp between 0.3x and 3.0x
     }
 
-    startSpawnTimer(totalSeconds = 5) {
+    startSpawnTimer(totalSeconds = 12) {
         if (!this.loadingTimer) {
             console.error('No loading timer found!');
             return;
@@ -512,17 +522,17 @@ export class DefogGame extends Phaser.Scene {
         
         // Selection ring - scale with insect size (hidden by default)
         const ringRadius = 25 * sizeScale;
-        const selectionRing = this.add.circle(startX, startY, ringRadius, 0xffffff, 0).setDepth(199);
+        const selectionRing = this.add.circle(startX, startY, ringRadius, 0xffffff, 0).setDepth(251);
         selectionRing.setStrokeStyle(3, 0x00ff00);
         selectionRing.setAlpha(0); // Hidden by default
         
         // Focus ring - slightly larger (REMOVED - we don't want it visible)
-        const focusRing = this.add.circle(startX, startY, ringRadius + 3, 0xffffff, 0).setDepth(198);
+        const focusRing = this.add.circle(startX, startY, ringRadius + 3, 0xffffff, 0).setDepth(250);
         focusRing.setStrokeStyle(2, 0xffaa00, 0.5);
         focusRing.setAlpha(0); // Always hidden
         
-        // Path graphics
-        const pathGraphics = this.add.graphics().setDepth(150);
+        // Path graphics - MUST be above revelation canvases (199, 200) to be visible!
+        const pathGraphics = this.add.graphics().setDepth(252);
         
         const insect = {
             sprite: insectSprite,
@@ -544,14 +554,14 @@ export class DefogGame extends Phaser.Scene {
             pathGraphics: pathGraphics,
             timeAtPosition: 0,
             lastPosition: { x: startX, y: startY },
-            focusLevel: 0,
+            focusLevel: 0.5, // Start with base focus so insects can defog while moving
             lastDefogX: startX,
             lastDefogY: startY,
             lastDefogLevel: 0,
             randomWalkMode: true,
             randomWalkTimer: 0,
             age: 0,
-            lifespan: insectId === 'ant' ? 240000 : 120000 / insectData.speed // Ants live 240s (4min), others 120s/speed (24-120s)
+            lifespan: insectId === 'ant' ? 180000 : 90000 / insectData.speed // Ants live 180s (3min), others 90s/speed (18-90s)
         };
         
         this.insects.push(insect);
@@ -562,8 +572,8 @@ export class DefogGame extends Phaser.Scene {
         // Progress to next species
         this.progressToNextSpecies();
         
-        // Start next spawn timer
-        this.startSpawnTimer(5);
+        // Start next spawn timer (12 seconds to prevent lag)
+        this.startSpawnTimer(12);
     }
 
     addRandomWaypoint(insect) {
@@ -587,30 +597,46 @@ export class DefogGame extends Phaser.Scene {
         }
         
         // After spawning the appropriate number, move to next species
-        // Lepidoptera (index 2) always spawns 2 because they're much bigger
-        // Others spawn progressively fewer as they get bigger:
-        // Round 0 (smallest): 5 spawns
-        // Round 1 (medium-small): 4 spawns  
-        // Round 2 (medium-large): 3 spawns
-        // Round 3 (largest): 2 spawns
-        const isLepidoptera = (this.familyProgression.currentFamilyInRound === 2);
-        const spawnsNeeded = isLepidoptera ? 2 : Math.max(2, 5 - this.familyProgression.currentRound);
+        // Spawn counts based on actual insect body size for balance:
+        // - Tiny insects (ant 4-11mm): 10 spawns (equivalent to 1 stag beetle)
+        // - Small insects (honeybee 11-18mm, ladybug 5-8mm): 5 spawns
+        // - Medium insects (bumblebee 11-28mm, firefly 10-20mm): 3 spawns
+        // - Large Lepidoptera (hawk moth 40-50mm, monarch 90-100mm): 1 spawn each
+        // - Very large beetles (stag beetle 30-75mm): 2 spawns
+        const familyIdx = this.familyProgression.currentFamilyInRound;
+        const sizeRound = this.familyProgression.currentRound;
+        const currentSpecies = this.speciesByFamily[familyIdx][sizeRound];
+        
+        // Define spawn counts per species for balanced gameplay
+        let spawnsNeeded = 3; // Default
+        if (currentSpecies === 'ant') spawnsNeeded = 10; // Tiny - 10 ants = 1 stag beetle
+        else if (currentSpecies === 'stag_beetle') spawnsNeeded = 1; // Very large beetle - only 1!
+        else if (familyIdx === 2) spawnsNeeded = 1; // All Lepidoptera are large (40-100mm)
+        else if (sizeRound === 0) spawnsNeeded = 5; // Small starting insects (mosquito, firefly)
+        else if (sizeRound === 1) spawnsNeeded = 4; // Medium-small insects
+        else if (sizeRound >= 2) spawnsNeeded = 3; // Medium-large insects
         
         if (this.familyProgression.spawnCountForCurrentSpecies >= spawnsNeeded) {
             this.familyProgression.spawnCountForCurrentSpecies = 0;
             this.familyProgression.currentFamilyInRound++;
+            this.familyProgression.familiesCompletedInRound++;
             
-            // After cycling through all 4 families, move to next size round
+            // Wrap family index to 0-3 range
             if (this.familyProgression.currentFamilyInRound >= 4) {
                 this.familyProgression.currentFamilyInRound = 0;
+            }
+            
+            // After cycling through all 4 families, move to next round
+            if (this.familyProgression.familiesCompletedInRound >= 4) {
+                this.familyProgression.familiesCompletedInRound = 0;
                 this.familyProgression.currentRound++;
                 
-                console.log(`Round ${this.familyProgression.currentRound - 1} complete! Moving to Round ${this.familyProgression.currentRound} (next size tier)`);
+                console.log(`Round ${this.familyProgression.currentRound - 1} complete! Moving to Round ${this.familyProgression.currentRound} (next vision tier)`);
                 
-                // After all 4 rounds (all sizes), loop back to start
+                // After all 4 rounds (all vision levels), loop back to start
                 if (this.familyProgression.currentRound >= 4) {
                     this.familyProgression.currentRound = 0;
-                    console.log('All sizes complete! Looping back to smallest insects.');
+                    console.log('All vision levels complete! Looping back to simplest vision.');
                 }
             }
             
@@ -619,9 +645,17 @@ export class DefogGame extends Phaser.Scene {
             const sizeRound = this.familyProgression.currentRound;
             this.currentSpeciesId = this.speciesByFamily[familyIdx][sizeRound];
             
+            // Calculate next spawn count
+            const nextSpecies = this.currentSpeciesId;
+            let nextSpawnsNeeded = 3; // Default
+            if (nextSpecies === 'ant') nextSpawnsNeeded = 10; // Tiny
+            else if (nextSpecies === 'stag_beetle') nextSpawnsNeeded = 1; // Very large beetle - only 1!
+            else if (familyIdx === 2) nextSpawnsNeeded = 1; // All Lepidoptera
+            else if (sizeRound === 0) nextSpawnsNeeded = 5; // Small starting insects
+            else if (sizeRound === 1) nextSpawnsNeeded = 4; // Medium-small
+            else if (sizeRound >= 2) nextSpawnsNeeded = 3; // Medium-large
+            
             const familyName = SUPERFAMILIES[familyIdx];
-            const isLepidoptera = (familyIdx === 2);
-            const nextSpawnsNeeded = isLepidoptera ? 2 : Math.max(2, 5 - sizeRound);
             console.log(`Next species: ${this.currentSpeciesId} (${familyName}, Round ${sizeRound}) - will spawn ${nextSpawnsNeeded}x`);
             
             // Update active panel display
@@ -752,13 +786,6 @@ export class DefogGame extends Phaser.Scene {
         // Simple display showing spectral vision progression
         const panelX = width / 2;
         const panelY = height - 30;
-        
-        this.add.text(panelX, panelY, 'Vision Evolution: 🐜 Simple → 🐝 Better → 🦋 Complex → 🐞 Advanced', {
-            fontSize: '12px',
-            color: '#ffaa00',
-            backgroundColor: '#000000aa',
-            padding: { x: 10, y: 3 }
-        }).setOrigin(0.5).setDepth(2500);
     }
 
     setupInputHandlers() {
@@ -842,10 +869,9 @@ export class DefogGame extends Phaser.Scene {
                 const dy = pointer.y - insect.sprite.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
-                // Large click radius for mobile
-                const baseRadius = 80;
-                const minRadius = 40;
-                const clickRadius = Math.max(minRadius, baseRadius * (insect.sizeScale || 1));
+                // Click radius matches selection ring size more closely
+                const baseRadius = 25; // Was 80, now much tighter
+                const clickRadius = baseRadius * (insect.sizeScale || 1);
                 
                 if (distance < clickRadius && distance < closestDistance) {
                     closestDistance = distance;
@@ -927,17 +953,20 @@ export class DefogGame extends Phaser.Scene {
             }
         });
         
-        // Select this insect and show its path (including random walk)
+        // Select this insect and show its current path
         this.selectedInsectIndices = [index];
         insect.isSelected = true;
         insect.userControlled = false; // Reset - next click will REPLACE path
         insect.selectionRing.setStrokeStyle(3, 0x00ff00);
         insect.selectionRing.setAlpha(1);
         
-        // Show current path immediately (even if it's a random walk path)
-        this.drawPath(insect);
-        
-        console.log(`✅ Selected: ${insect.data.name}`);
+        // Show current path immediately (all waypoints the insect has)
+        if (insect.waypoints && insect.waypoints.length > 0) {
+            this.drawPath(insect);
+            console.log(`✅ Selected: ${insect.data.name} - showing ${insect.waypoints.length} waypoints`);
+        } else {
+            console.log(`✅ Selected: ${insect.data.name} - no waypoints yet (random walk mode)`);
+        }
     }
 
     addWaypoint(x, y, addToPath = false) {
@@ -958,13 +987,14 @@ export class DefogGame extends Phaser.Scene {
         // SMART PATH SYSTEM:
         // First click after selection = REPLACE path (reprogram)
         // Subsequent clicks = ADD to path (multiway)
-        if (!insect.userControlled || insect.waypoints.length === 0) {
-            // First command - replace path completely
+        // IMPORTANT: Once userControlled is true, keep it true!
+        if (!insect.userControlled) {
+            // First command EVER - replace path completely
             insect.waypoints = [{ x, y }];
             insect.userControlled = true;
             console.log(`🎯 New path for ${insect.data.name} → (${Math.round(x)}, ${Math.round(y)})`);
         } else {
-            // Subsequent commands - add to existing path (multiway)
+            // User has controlled before - add to existing path (multiway)
             insect.waypoints.push({ x, y });
             const waypointNum = insect.waypoints.length;
             console.log(`📍 Waypoint ${waypointNum} added for ${insect.data.name} → (${Math.round(x)}, ${Math.round(y)})`);
@@ -1048,7 +1078,11 @@ export class DefogGame extends Phaser.Scene {
             insect.age += delta;
             
             if (insect.age >= insect.lifespan) {
-                // Insect died - clean up
+                // Insect died - check if it was selected
+                const wasSelected = insect.isSelected;
+                const selectedIndex = this.selectedInsectIndices.indexOf(insect.index);
+                
+                // Clean up
                 insect.sprite.destroy();
                 insect.selectionRing.destroy();
                 insect.focusRing.destroy();
@@ -1056,7 +1090,15 @@ export class DefogGame extends Phaser.Scene {
                 insect.lifespanBarBg.destroy();
                 insect.pathGraphics.destroy();
                 insect.spectrumIndicators.forEach(ind => ind.destroy());
-                console.log(`💀 ${insect.data.name} died after ${(insect.age/1000).toFixed(1)}s`);
+                
+                // Clear selection if this insect was selected
+                if (wasSelected || selectedIndex >= 0) {
+                    this.selectedInsectIndices = [];
+                    console.log(`💀 ${insect.data.name} died (was selected - cleared selection)`);
+                } else {
+                    console.log(`💀 ${insect.data.name} died after ${(insect.age/1000).toFixed(1)}s`);
+                }
+                
                 return false; // Remove from array
             }
             
@@ -1076,15 +1118,36 @@ export class DefogGame extends Phaser.Scene {
             return true; // Keep alive
         });
         
-        // Update indices after filtering - DON'T recreate event handlers!
+        // Update indices after filtering
         this.insects.forEach((insect, newIdx) => {
+            const oldIdx = insect.index;
             insect.index = newIdx;
             // Update the index stored in sprite data
             insect.sprite.setData('insectIndex', newIdx);
         });
         
-        // Clear invalid selections (indices that no longer exist)
-        this.selectedInsectIndices = this.selectedInsectIndices.filter(idx => idx < this.insects.length);
+        // Clear invalid selections AND mark insects as deselected
+        const validSelections = this.selectedInsectIndices.filter(idx => {
+            if (idx >= this.insects.length) {
+                return false; // Invalid index
+            }
+            return true;
+        });
+        
+        // If selection became invalid, clear it completely
+        if (validSelections.length !== this.selectedInsectIndices.length) {
+            this.selectedInsectIndices = [];
+            // Make sure all insects are marked as not selected
+            this.insects.forEach(insect => {
+                if (insect.isSelected) {
+                    insect.isSelected = false;
+                    insect.selectionRing.setAlpha(0);
+                    insect.pathGraphics.clear();
+                }
+            });
+        } else {
+            this.selectedInsectIndices = validSelections;
+        }
         
         // CRITICAL: Create a copy of insects array to prevent iterator issues during modification
         const insectsSnapshot = [...this.insects];
@@ -1094,7 +1157,8 @@ export class DefogGame extends Phaser.Scene {
             if (!insect || !insect.sprite || !insect.sprite.active) return;
             
             // Random walk mode - add new waypoint when current one is reached
-            if (insect.randomWalkMode && insect.waypoints.length === 0) {
+            // BUT: Don't random walk if user has ever controlled this insect!
+            if (insect.randomWalkMode && !insect.userControlled && insect.waypoints.length === 0) {
                 insect.randomWalkTimer += delta;
                 if (insect.randomWalkTimer > 2000) { // Every 2 seconds
                     this.addRandomWaypoint(insect);
@@ -1144,24 +1208,17 @@ export class DefogGame extends Phaser.Scene {
                 }
             }
             
-            // Only defog if insect has moved or focus has changed significantly
-            const dxDefog = insect.sprite.x - insect.lastDefogX;
-            const dyDefog = insect.sprite.y - insect.lastDefogY;
-            const distanceFromLastDefog = Math.sqrt(dxDefog * dxDefog + dyDefog * dyDefog);
-            const focusChange = insect.focusLevel - insect.lastDefogLevel;
-            
-            // Defog if moved more than 3 pixels OR focus increased by 0.1
-            if (distanceFromLastDefog > 3 || focusChange > 0.1) {
-                this.defogAtInsect(insect);
-                insect.lastDefogX = insect.sprite.x;
-                insect.lastDefogY = insect.sprite.y;
-                insect.lastDefogLevel = insect.focusLevel;
-            }
+            // Defog continuously as insect moves (especially important for monochromats)
+            // They need to reveal the world as they walk!
+            this.defogAtInsect(insect);
+            insect.lastDefogX = insect.sprite.x;
+            insect.lastDefogY = insect.sprite.y;
+            insect.lastDefogLevel = insect.focusLevel;
         });
     }
 
     moveInsectToward(insect, targetX, targetY, delta) {
-        const speed = insect.data.speed * 0.01; // VERY slow - was 0.03, now 0.01
+        const speed = insect.data.speed * 0.05; // Balanced speed for path completion
         const dx = targetX - insect.sprite.x;
         const dy = targetY - insect.sprite.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -1207,90 +1264,142 @@ export class DefogGame extends Phaser.Scene {
         // Scale defog radius based on actual insect size
         const sizeScale = insect.sizeScale || 1.0;
         const baseRadius = insect.data.defogRadius;
-        const scaledRadius = baseRadius * sizeScale; // Smaller insects = smaller defog area
+        const scaledRadius = baseRadius * sizeScale;
         
-        // Calculate blur based on ommatidia count
-        const ommatidiaRatio = Math.min(1, insect.data.ommatidia / 6000);
-        const blurRadius = Math.max(3, 30 * (1 - ommatidiaRatio));
-        
-        // Adjust reveal radius based on focus level (temporal resolution)
-        const effectiveRadius = scaledRadius * insect.focusLevel;
-        
-        // Only defog if insect has some focus
-        const minFocus = 0.15;
-        if (insect.focusLevel < minFocus) return;
+        // Adjust reveal radius based on focus level
+        const effectiveRadius = scaledRadius * Math.max(0.3, insect.focusLevel);
         
         // Get spectral weights for this insect
         const weights = insect.data.spectralWeights || { r: 0.33, g: 0.33, b: 0.33 };
         
-        // CRITICAL COLOR VISION LOGIC:
-        // Standard insects: ERASE fog layers they CANNOT see (low weight)
-        //                   KEEP fog layers they CAN see (high weight)
-        // Full-spectrum insects (all weights high): ERASE ALL fogs to reveal full color
-        // Example: Ant (g:1.0, r:0, b:0) erases RED+BLUE fogs, keeps GREEN fog → GREEN world
-        // Example: Cabbage White (r:1.0, g:1.0, b:0.8) erases ALL fogs → FULL COLOR world
+        // Check if this is a monochromat (only one receptor) - ants & stag beetles!
+        const isMonochromat = insect.data.spectrum.length === 1;
         
-        // Check if this is a full-spectrum insect (can see all colors)
-        const canSeeAll = weights.r >= 0.5 && weights.g >= 0.5 && weights.b >= 0.5;
+        // Convert screen coordinates to image coordinates
+        const imageX = ((x - this.imageBounds.left) / this.hiddenImage.displayWidth) * this.hiddenImage.width;
+        const imageY = ((y - this.imageBounds.top) / this.hiddenImage.displayHeight) * this.hiddenImage.height;
         
-        ['R', 'G', 'B'].forEach(channel => {
-            const fogLayer = this.fogLayers[channel];
-            if (!fogLayer) return;
-            
-            // Get weight for this channel (r/g/b)
-            const channelKey = channel.toLowerCase();
-            const weight = weights[channelKey] || 0;
-            
-            // SPECIAL CASE: Full-spectrum insects erase ALL fogs
-            if (canSeeAll) {
-                // Erase all fogs to reveal full color world
-                const graphics = this.make.graphics();
-                const steps = Math.min(10, Math.ceil(blurRadius));
-                
-                for (let i = 0; i < steps; i++) {
-                    const ratio = i / steps;
-                    const currentRadius = effectiveRadius * (1 - ratio * 0.3);
-                    
-                    // Full erasing power scaled by weight (stronger for r/g than b)
-                    const baseAlpha = insect.focusLevel * (1 - ratio) * 0.9;
-                    const weightedAlpha = baseAlpha * weight; // Use weight directly for full-spectrum
-                    
-                    graphics.fillStyle(0xffffff, weightedAlpha);
-                    graphics.fillCircle(x, y, currentRadius);
-                }
-                
-                fogLayer.erase(graphics);
-                graphics.destroy();
-                return; // Skip normal logic
-            }
-            
-            // NORMAL CASE: ERASE fogs they're BLIND to (low weight = can't see = remove fog)
-            // KEEP fogs they're SENSITIVE to (high weight = can see = keep fog)
-            const threshold = 0.5; // Only erase if weight BELOW this (blind to color)
-            if (weight >= threshold) return; // Skip - this insect CAN see this color
-            
-            // Create blurred reveal - gradient from center outward
+        // MONOCHROMATS: Paint inverted brightness (B&W contrast inversion) on B&W layer
+        if (isMonochromat) {
             const graphics = this.make.graphics();
             
-            // Reduced steps for better performance
-            const steps = Math.min(10, Math.ceil(blurRadius));
-            for (let i = 0; i < steps; i++) {
-                const ratio = i / steps;
-                const currentRadius = effectiveRadius * (1 - ratio * 0.3);
-                
-                // Alpha scales with INVERSE of weight (LOW weight = MORE erasing)
-                // Also scales with focus (more focus = more reveal)
-                const baseAlpha = insect.focusLevel * (1 - ratio) * 0.9;
-                const blindnessStrength = 1 - weight; // 0 weight = 1.0 blindness (full erase)
-                const weightedAlpha = baseAlpha * blindnessStrength;
-                
-                graphics.fillStyle(0xffffff, weightedAlpha);
-                graphics.fillCircle(x, y, currentRadius);
+            // Sample a grid of pixels around the insect to paint inverted brightness
+            const sampleRadius = Math.ceil(effectiveRadius);
+            const step = 4; // Sample every 4 pixels for performance
+            
+            let pixelsPainted = 0;
+            
+            for (let dy = -sampleRadius; dy <= sampleRadius; dy += step) {
+                for (let dx = -sampleRadius; dx <= sampleRadius; dx += step) {
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > sampleRadius) continue;
+                    
+                    // Calculate position in original image
+                    const px = Math.floor(imageX + (dx / this.hiddenImage.displayWidth) * this.hiddenImage.width);
+                    const py = Math.floor(imageY + (dy / this.hiddenImage.displayHeight) * this.hiddenImage.height);
+                    
+                    // Bounds check
+                    if (px < 0 || px >= this.hiddenImage.width || py < 0 || py >= this.hiddenImage.height) continue;
+                    
+                    // Sample pixel from canvas
+                    const pixelData = this.imageContext.getImageData(px, py, 1, 1).data;
+                    const r = pixelData[0];
+                    const g = pixelData[1];
+                    const b = pixelData[2];
+                    
+                    // Calculate brightness (luminance)
+                    const brightness = (r + g + b) / 3;
+                    
+                    // INVERT: dark becomes light, light becomes dark
+                    const inverted = 255 - brightness;
+                    
+                    // Paint inverted brightness as grayscale
+                    const gray = Phaser.Display.Color.GetColor(inverted, inverted, inverted);
+                    
+                    // Fade based on distance from center
+                    const alpha = (1 - dist / sampleRadius) * insect.focusLevel * 0.9;
+                    
+                    graphics.fillStyle(gray, alpha);
+                    graphics.fillCircle(x + dx, y + dy, step * 0.6);
+                    
+                    pixelsPainted++;
+                }
             }
             
-            // Erase from this specific color channel's fog
-            fogLayer.erase(graphics);
+            // Paint onto B&W layer (depth 199 - UNDER color layer!)
+            this.bwCanvas.draw(graphics, 0, 0);
             graphics.destroy();
-        });
+            
+            if (pixelsPainted > 0 && Math.random() < 0.05) { // Log only 5% of the time
+                console.log(`🐜 Ant painted ${pixelsPainted} B&W pixels on bottom layer`);
+            }
+            return;
+        }
+        
+        // COLOR INSECTS: Paint ACTUAL colors (not their perception!)
+        // The spectral weights determine WHICH areas they reveal, not HOW they paint them
+        const graphics = this.make.graphics();
+        
+        // Sample pixels and paint them with REAL colors from the image
+        const sampleRadius = Math.ceil(effectiveRadius);
+        const step = 4;
+        
+        let pixelsPainted = 0;
+        
+        for (let dy = -sampleRadius; dy <= sampleRadius; dy += step) {
+            for (let dx = -sampleRadius; dx <= sampleRadius; dx += step) {
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > sampleRadius) continue;
+                
+                // Calculate position in original image
+                const px = Math.floor(imageX + (dx / this.hiddenImage.displayWidth) * this.hiddenImage.width);
+                const py = Math.floor(imageY + (dy / this.hiddenImage.displayHeight) * this.hiddenImage.height);
+                
+                // Bounds check
+                if (px < 0 || px >= this.hiddenImage.width || py < 0 || py >= this.hiddenImage.height) continue;
+                
+                // Sample pixel from canvas
+                const pixelData = this.imageContext.getImageData(px, py, 1, 1).data;
+                const r = pixelData[0];
+                const g = pixelData[1];
+                const b = pixelData[2];
+                
+                // Apply spectral weights to how MUCH of each color channel is revealed
+                // Insects with weak red sensitivity reveal red slowly (low alpha)
+                // Insects with strong green sensitivity reveal green quickly (high alpha)
+                const weightedR = r * weights.r;  // Weak red → slow red revelation
+                const weightedG = g * weights.g;  // Strong green → fast green revelation
+                const weightedB = b * weights.b;  // Medium blue → medium blue revelation
+                
+                // Paint the weighted color - unbalanced vision = unbalanced revelation
+                const color = Phaser.Display.Color.GetColor(
+                    Math.floor(weightedR), 
+                    Math.floor(weightedG), 
+                    Math.floor(weightedB)
+                );
+                
+                // Base alpha from distance and focus
+                const baseAlpha = (1 - dist / sampleRadius) * insect.focusLevel * 0.9;
+                
+                // Calculate channel-specific alpha modulation
+                // Use the MAXIMUM weight to determine overall visibility
+                // But the color itself is already weighted
+                const maxWeight = Math.max(weights.r, weights.g, weights.b);
+                const channelAlpha = baseAlpha * (maxWeight / 1.0); // Normalize to strongest channel
+                
+                graphics.fillStyle(color, channelAlpha);
+                graphics.fillCircle(x + dx, y + dy, step * 0.6);
+                
+                pixelsPainted++;
+            }
+        }
+        
+        // Paint onto COLOR layer (depth 200 - ON TOP of B&W layer!)
+        this.colorCanvas.draw(graphics, 0, 0);
+        graphics.destroy();
+        
+        if (pixelsPainted > 0 && Math.random() < 0.05) {
+            console.log(`🐝 ${insect.data.name} painted ${pixelsPainted} color pixels on top layer`);
+        }
     }
 }

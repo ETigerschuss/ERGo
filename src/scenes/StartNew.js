@@ -68,11 +68,12 @@ export class Start extends Phaser.Scene {
         ];
 
         // Species by family (matching game order, vision quality)
+        // Note: Each family starts with simplest vision (monochromat if available)
         const speciesByFamily = [
-            ['ant', 'honeybee', 'bumblebee', 'hornet'],           // Hymenoptera
-            ['vinegar_fly', 'housefly', 'robber_fly', 'horsefly'],  // Diptera
-            ['hawk_moth', 'peacock', 'monarch', 'cabbage_white'], // Lepidoptera
-            ['stag_beetle', 'firefly', 'ladybug', 'rose_chafer']  // Coleoptera
+            ['ant', 'honeybee', 'bumblebee', 'hornet'],              // Hymenoptera: mono→tri→tri+→tri++
+            ['mosquito', 'vinegar_fly', 'housefly', 'horsefly'],     // Diptera: mono→hexa→penta→tri+red
+            ['hawk_moth', 'peacock', 'monarch', 'cabbage_white'],    // Lepidoptera: tri→tri+→tri++→tetra (NO monochromats exist in butterflies/moths!)
+            ['stag_beetle', 'firefly', 'ladybug', 'rose_chafer']     // Coleoptera: mono→di→tri→tri+red
         ];
 
         this.familyPanels = [];
@@ -183,19 +184,24 @@ export class Start extends Phaser.Scene {
 
         // Species selection container
         this.speciesContainer = this.add.container(0, 0);
+        
+        // Store all created elements so we can destroy them later
+        this.speciesElements = [];
 
         // Header
         const emoji = SUPERFAMILY_EMOJI[familyName];
-        this.add.text(width / 2, 80, `${emoji} ${familyName}`, {
+        const header = this.add.text(width / 2, 80, `${emoji} ${familyName}`, {
             fontSize: '36px',
             color: '#ffaa00',
             fontStyle: 'bold'
         }).setOrigin(0.5);
+        this.speciesElements.push(header);
 
-        this.add.text(width / 2, 130, 'You will progress through these species:', {
+        const subheader = this.add.text(width / 2, 130, 'You will progress through these species:', {
             fontSize: '16px',
             color: '#888888'
         }).setOrigin(0.5);
+        this.speciesElements.push(subheader);
 
         // Show all 4 species in this family
         const cardWidth = 250;
@@ -213,60 +219,68 @@ export class Start extends Phaser.Scene {
             const card = this.add.rectangle(posX, startY, cardWidth, cardHeight, isFirst ? 0x16213e : 0x0f1520, 0.95)
                 .setOrigin(0)
                 .setStrokeStyle(3, isFirst ? 0x00ff66 : 0x333333);
+            this.speciesElements.push(card);
 
             const centerX = posX + cardWidth / 2;
 
             // Species number and emoji/image
-            this.add.text(centerX, startY + 25, `${index + 1}/4`, {
+            const numberText = this.add.text(centerX, startY + 25, `${index + 1}/4`, {
                 fontSize: '14px',
                 color: isFirst ? '#00ff66' : '#666666',
                 fontStyle: 'bold'
             }).setOrigin(0.5);
+            this.speciesElements.push(numberText);
 
             // Species emoji
             const speciesEmoji = this.getSpeciesEmoji(speciesId);
-            this.add.text(centerX, startY + 60, speciesEmoji, {
+            const emojiText = this.add.text(centerX, startY + 60, speciesEmoji, {
                 fontSize: '48px'
             }).setOrigin(0.5);
+            this.speciesElements.push(emojiText);
 
             // Species name
-            this.add.text(centerX, startY + 115, insectData.name, {
+            const nameText = this.add.text(centerX, startY + 115, insectData.name, {
                 fontSize: '16px',
                 color: '#ffffff',
                 fontStyle: 'bold',
                 align: 'center'
             }).setOrigin(0.5);
+            this.speciesElements.push(nameText);
 
-            this.add.text(centerX, startY + 140, insectData.scientificName, {
+            const sciText = this.add.text(centerX, startY + 140, insectData.scientificName, {
                 fontSize: '11px',
                 color: '#888888',
                 fontStyle: 'italic',
                 align: 'center'
             }).setOrigin(0.5);
+            this.speciesElements.push(sciText);
 
             // Detailed attributes
             const detailedAttrs = this.formatDetailedAttributes(insectData);
-            this.add.text(centerX, startY + 175, detailedAttrs, {
+            const attrsText = this.add.text(centerX, startY + 175, detailedAttrs, {
                 fontSize: '11px',
                 color: '#aaaaaa',
                 align: 'left',
                 lineSpacing: 3
             }).setOrigin(0.5, 0);
+            this.speciesElements.push(attrsText);
 
             // "Starting insect" badge
             if (isFirst) {
-                this.add.text(centerX, startY + 310, '▶ STARTING INSECT', {
+                const badge = this.add.text(centerX, startY + 310, '▶ STARTING INSECT', {
                     fontSize: '13px',
                     color: '#00ff66',
                     fontStyle: 'bold',
                     backgroundColor: '#003311',
                     padding: { x: 10, y: 5 }
                 }).setOrigin(0.5);
+                this.speciesElements.push(badge);
             } else {
-                this.add.text(centerX, startY + 310, `Unlocks later (${index}/4)`, {
+                const unlockText = this.add.text(centerX, startY + 310, `Unlocks later (${index}/4)`, {
                     fontSize: '11px',
                     color: '#666666'
                 }).setOrigin(0.5);
+                this.speciesElements.push(unlockText);
             }
         });
 
@@ -274,12 +288,14 @@ export class Start extends Phaser.Scene {
         const backButton = this.add.rectangle(100, height - 60, 150, 40, 0x444444, 0.9)
             .setStrokeStyle(2, 0x666666);
         backButton.setInteractive({ useHandCursor: true });
+        this.speciesElements.push(backButton);
 
         const backText = this.add.text(100, height - 60, '← Back', {
             fontSize: '16px',
             color: '#ffffff',
             fontStyle: 'bold'
         }).setOrigin(0.5);
+        this.speciesElements.push(backText);
 
         backButton.on('pointerover', () => {
             backButton.setFillStyle(0x555555, 1);
@@ -297,12 +313,14 @@ export class Start extends Phaser.Scene {
         const startButton = this.add.rectangle(width - 100, height - 60, 200, 50, 0x00aa44, 0.9)
             .setStrokeStyle(3, 0x00ff66);
         startButton.setInteractive({ useHandCursor: true });
+        this.speciesElements.push(startButton);
 
         const startText = this.add.text(width - 100, height - 60, 'START GAME ▶', {
             fontSize: '18px',
             color: '#ffffff',
             fontStyle: 'bold'
         }).setOrigin(0.5);
+        this.speciesElements.push(startText);
 
         startButton.on('pointerover', () => {
             startButton.setFillStyle(0x00cc55, 1);
@@ -358,7 +376,7 @@ export class Start extends Phaser.Scene {
     getSpeciesEmoji(speciesId) {
         const emojiMap = {
             ant: '🐜', honeybee: '🐝', bumblebee: '🐝', hornet: '🐝',
-            vinegar_fly: '🪰', housefly: '🪰', robber_fly: '🪰', horsefly: '🪰',
+            mosquito: '🦟', vinegar_fly: '🪰', housefly: '🪰', robber_fly: '🪰', horsefly: '🪰', hoverfly: '🪰',
             hawk_moth: '🦋', peacock: '🦋', monarch: '🦋', cabbage_white: '🦋',
             stag_beetle: '🪲', firefly: '🪲', ladybug: '🐞', rose_chafer: '🪲'
         };
@@ -368,7 +386,17 @@ export class Start extends Phaser.Scene {
     goBack() {
         console.log('Going back to family selection');
         
-        // Hide species container
+        // Destroy all species elements
+        if (this.speciesElements) {
+            this.speciesElements.forEach(element => {
+                if (element) {
+                    element.destroy();
+                }
+            });
+            this.speciesElements = [];
+        }
+        
+        // Hide and destroy species container
         if (this.speciesContainer) {
             this.speciesContainer.setVisible(false);
             this.speciesContainer.destroy();

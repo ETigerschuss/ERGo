@@ -26,9 +26,9 @@ export const INSECT_DATABASE = {
         scientificName: "Apis mellifera",
         superfamily: "Hymenoptera",
         ommatidia: 5000,  // Average of 4752-5432
-        spectrum: [346, 430, 540],  // UV, Blue, Green
+        spectrum: [346, 430, 540],  // UV, Blue, Green - no red sensitivity
         colorSpectrum: ["UV", "B", "G"],
-        spectralWeights: { r: 0.0, g: 1.0, b: 0.8 },  // Strong green+blue, NO red
+        spectralWeights: { r: 0.1, g: 1.0, b: 0.8 },  // Slight red (broadband tails), strong green+blue
         size: "11-18mm",
         wingspan: "18mm",
         weight: "82mg",
@@ -46,7 +46,7 @@ export const INSECT_DATABASE = {
         ommatidia: 6250,  // Average of 6000-6500
         spectrum: [348, 435, 533],
         colorSpectrum: ["UV", "B", "G"],
-        spectralWeights: { r: 0.0, g: 1.0, b: 0.85 },  // Very strong green+blue, NO red
+        spectralWeights: { r: 0.15, g: 1.0, b: 0.85 },  // Slight red (broadband), very strong green+blue
         size: "11-28mm",
         wingspan: "22-34mm",
         weight: "50-400mg",
@@ -64,7 +64,7 @@ export const INSECT_DATABASE = {
         ommatidia: 5500,  // Estimated based on similar species
         spectrum: [346, 445, 529],
         colorSpectrum: ["UV", "B", "G"],
-        spectralWeights: { r: 0.0, g: 0.85, b: 1.0 },  // Blue-shifted for hunting, NO red
+        spectralWeights: { r: 0.2, g: 0.85, b: 1.0 },  // Some red (broadband), blue-shifted for hunting
         size: "18-35mm",
         wingspan: "40-50mm",
         weight: "200-300mg",
@@ -79,17 +79,17 @@ export const INSECT_DATABASE = {
         name: "Red Wood Ant",
         scientificName: "Formica rufa",
         superfamily: "Hymenoptera",
-        ommatidia: 500,  // Ants have relatively few
-        spectrum: [540],  // Limited color vision - mostly chemical navigation
-        colorSpectrum: ["G"], // Only green - no UV!
-        spectralWeights: { r: 0.0, g: 1.0, b: 0.0 },  // ONLY green - monochromat!
+        ommatidia: 1200,  // Increased from 500 - ants actually have decent eyes for their size
+        spectrum: [540],  // Single receptor - monochromat
+        colorSpectrum: ["G"], // Only green - but excellent edge detection!
+        spectralWeights: { r: 0.2, g: 1.0, b: 0.3 },  // Mostly green with slight R+B for better edges
         size: "4-11mm",
         wingspan: "5-12mm",
         weight: "10-20mg",
         speed: 1,
-        defogRadius: 45,
+        defogRadius: 50,  // Larger radius - they defog more area as edge detectors
         color: 0xaa3300,
-        funFact: "15-20% of terrestrial biomass - despite poor eyesight, use chemical trails",
+        funFact: "15-20% of terrestrial biomass - despite monochromatic vision, excellent edge detectors using chemical trails",
         iNaturalist: 1781
     },
 
@@ -102,14 +102,14 @@ export const INSECT_DATABASE = {
         ommatidia: 3450,
         spectrum: [335, 355, 460, 490, 530],  // 5 receptors!
         colorSpectrum: ["UV", "B", "G"],
-        spectralWeights: { r: 0.0, g: 0.85, b: 1.0 },  // Cyan-shifted (strong blue-green), NO red
+        spectralWeights: { r: 0.2, g: 0.85, b: 1.0 },  // Slight red (R1-R6 broadband), cyan-shifted
         size: "8-12mm",
         wingspan: "13-15mm",
         weight: "12mg",
         speed: 4,
         defogRadius: 28,
         color: 0x666666,
-        funFact: "Found everywhere - processes visual info 4x faster than humans",
+        funFact: "Found everywhere - processes visual info 4x faster than humans with 5 receptor types",
         iNaturalist: 6871
     },
     
@@ -120,14 +120,14 @@ export const INSECT_DATABASE = {
         ommatidia: 6400,  // Very high for precise hovering
         spectrum: [350, 450, 520],
         colorSpectrum: ["UV", "B", "G"],
-        spectralWeights: { r: 0.0, g: 0.85, b: 1.0 },  // Very strong blue+green, NO red
+        spectralWeights: { r: 0.25, g: 0.85, b: 1.0 },  // Some red (broadband), very strong blue+green
         size: "15mm",
         wingspan: "15mm",
         weight: "50mg",
         speed: 4,
         defogRadius: 25,
         color: 0xff8800,
-        funFact: "Can hover in place - needs excellent motion detection with 6400 ommatidia",
+        funFact: "Can hover in place - needs excellent motion detection with 6400 ommatidia and broadband receptors",
         iNaturalist: 13697
     },
     
@@ -136,16 +136,16 @@ export const INSECT_DATABASE = {
         scientificName: "Drosophila melanogaster",
         superfamily: "Diptera",
         ommatidia: 760,  // Small eye with ~760 ommatidia
-        spectrum: [345, 375, 420, 480],  // UV, UV-B, Blue, Cyan
-        colorSpectrum: ["UV", "B"],
-        spectralWeights: { r: 0.0, g: 0.4, b: 1.0 },  // Excellent blue, some green, NO red
+        spectrum: [330, 350, 370, 437, 480, 508],  // R1-R6 (broad), R7p (UV), R7y (UV+B), R8p (B), R8y (G) - very broad!
+        colorSpectrum: ["UV", "B", "G"],
+        spectralWeights: { r: 0.3, g: 0.9, b: 1.0 },  // Broad detection including some red (R1-R6 broadband to 600nm)
         size: "2-3mm",
         wingspan: "6mm",
         weight: "1mg",
         speed: 3,
         defogRadius: 50,  // Increased from 35 - better vision for its size
         color: 0xccaa66,
-        funFact: "Model organism in genetics - tiny but with sophisticated vision",
+        funFact: "Model organism with 6 photoreceptor types - R1-R6 broadband (330-600nm), R7/R8 specialized UV-G",
         iNaturalist: 47219
     },
     
@@ -192,14 +192,14 @@ export const INSECT_DATABASE = {
         ommatidia: 5500,  // Predatory flies have excellent vision
         spectrum: [350, 470, 520],
         colorSpectrum: ["UV", "B", "G"],
-        spectralWeights: { r: 0.0, g: 0.9, b: 1.0 },  // Strong blue+green, NO red
+        spectralWeights: { r: 0.25, g: 0.9, b: 1.0 },  // Some red (broadband), strong blue+green
         size: "10-30mm",
         wingspan: "20-40mm",
         weight: "50mg",
         speed: 5,
         defogRadius: 28,
         color: 0x997744,
-        funFact: "Aerial predator with amazing vision to catch prey mid-flight",
+        funFact: "Aerial predator with amazing vision to catch prey mid-flight - broadband receptors for motion tracking",
         iNaturalist: 47652
     },
 
@@ -212,14 +212,14 @@ export const INSECT_DATABASE = {
         ommatidia: 12000,  // Estimated based on similar species
         spectrum: [360, 460, 530],
         colorSpectrum: ["UV", "B", "G"],
-        spectralWeights: { r: 0.0, g: 0.9, b: 0.85 },  // Balanced green+blue, NO red
+        spectralWeights: { r: 0.3, g: 0.9, b: 0.85 },  // Some red (broadband), balanced green+blue
         size: "50-55mm",
         wingspan: "60-70mm",
         weight: "400mg",
         speed: 3,
         defogRadius: 22,
         color: 0x8800aa,
-        funFact: "Caterpillars feed on nettles - adults drink in beer gardens!",
+        funFact: "Caterpillars feed on nettles - adults drink in beer gardens! Broadband receptors detect into red.",
         iNaturalist: 16942
     },
     
@@ -248,14 +248,14 @@ export const INSECT_DATABASE = {
         ommatidia: 12000,
         spectrum: [340, 435, 540],
         colorSpectrum: ["UV", "B", "G"],
-        spectralWeights: { r: 0.0, g: 1.0, b: 0.75 },  // Strong green+blue for navigation, NO red
+        spectralWeights: { r: 0.35, g: 1.0, b: 0.75 },  // Some red (broadband tails), strong green+blue for navigation
         size: "90-100mm",
         wingspan: "90-100mm",
         weight: "500mg",
         speed: 3,
         defogRadius: 22,
         color: 0xff6600,
-        funFact: "Migrates 3000 miles using sun compass navigation - found only in America",
+        funFact: "Migrates 3000 miles using sun compass navigation - found only in America. Long-wavelength detection aids flower finding.",
         iNaturalist: 119002
     },
     
@@ -264,16 +264,16 @@ export const INSECT_DATABASE = {
         scientificName: "Macroglossum stellatarum",
         superfamily: "Lepidoptera",
         ommatidia: 8000,
-        spectrum: [349, 440, 521],
+        spectrum: [349, 440, 521, 580],  // UV, Blue, Green, Orange - broadband detection into red
         colorSpectrum: ["UV", "B", "G"],
-        spectralWeights: { r: 0.0, g: 1.0, b: 0.7 },  // Strong green+blue for flowers, NO red
+        spectralWeights: { r: 0.4, g: 1.0, b: 0.7 },  // Some red (broadband tail), strong green+blue
         size: "40-50mm",
         wingspan: "40-45mm",
         weight: "300mg",
         speed: 4,
         defogRadius: 25,
         color: 0x996633,
-        funFact: "Hovers like a hummingbird with excellent color vision even at dusk",
+        funFact: "Hovers like a hummingbird - broadband photoreceptors extend into orange/red spectrum",
         iNaturalist: 5379
     },
 
@@ -286,14 +286,14 @@ export const INSECT_DATABASE = {
         ommatidia: 3000,  // Estimated
         spectrum: [360, 420, 520],
         colorSpectrum: ["UV", "B", "G"],
-        spectralWeights: { r: 0.0, g: 1.0, b: 0.7 },  // Very strong green+blue for aphids, NO red
+        spectralWeights: { r: 0.2, g: 1.0, b: 0.7 },  // Some red (broadband), very strong green+blue for aphids
         size: "5.5-8mm",
         wingspan: "10-12mm",
         weight: "15mg",
         speed: 2,
         defogRadius: 35,
         color: 0xff0000,
-        funFact: "Can see green aphids against green leaves using color contrast",
+        funFact: "Can see green aphids against green leaves using color contrast - broadband receptors aid detection",
         iNaturalist: 41716
     },
     
@@ -304,7 +304,7 @@ export const INSECT_DATABASE = {
         ommatidia: 2000,
         spectrum: [440, 520],  // Nocturnal - no UV!
         colorSpectrum: ["B", "G"], // Blue-green vision for bioluminescence
-        spectralWeights: { r: 0.0, g: 1.0, b: 0.8 },  // Green+blue for bioluminescence, NO red
+        spectralWeights: { r: 0.15, g: 1.0, b: 0.8 },  // Slight red (broadband), green+blue for bioluminescence
         size: "10-20mm",
         wingspan: "15-25mm",
         weight: "100mg",
@@ -319,17 +319,17 @@ export const INSECT_DATABASE = {
         name: "Stag Beetle",
         scientificName: "Lucanus cervus",
         superfamily: "Coleoptera",
-        ommatidia: 2500,
-        spectrum: [525],  // Very limited vision - mostly nocturnal
+        ommatidia: 800,  // Reduced - poor vision, mostly nocturnal
+        spectrum: [525],  // Single receptor - monochromat
         colorSpectrum: ["G"], // Only green!
-        spectralWeights: { r: 0.0, g: 1.0, b: 0.0 },  // ONLY green - monochromat!
+        spectralWeights: { r: 0.15, g: 1.0, b: 0.2 },  // Mostly green with slight R+B for edges (like ant)
         size: "30-75mm",
         wingspan: "50-80mm",
         weight: "3000mg",
         speed: 1,
-        defogRadius: 45,
+        defogRadius: 50,  // Large area but grayscale only
         color: 0x442200,
-        funFact: "Europe's largest beetle - males have impressive antler-like mandibles",
+        funFact: "Europe's largest beetle - males have impressive antler-like mandibles. Poor vision, relies on pheromones",
         iNaturalist: 5832
     },
     
