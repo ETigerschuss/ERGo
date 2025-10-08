@@ -130,15 +130,33 @@ export class DefogGame extends Phaser.Scene {
         const bwCanvas = this.add.renderTexture(0, 0, width, height);
         bwCanvas.setOrigin(0, 0);
         bwCanvas.fill(0x000000, 1.0);  // Start black
-        bwCanvas.setDepth(199);  // Below color layer
+        bwCanvas.setDepth(199);  // Below color layers
         this.bwCanvas = bwCanvas;
         
-        // Layer 2 (top): Color revelation layer for color-vision insects
-        const colorCanvas = this.add.renderTexture(0, 0, width, height);
-        colorCanvas.setOrigin(0, 0);
-        colorCanvas.fill(0x000000, 0);  // Start transparent!
-        colorCanvas.setDepth(200);  // On top of B&W layer
-        this.colorCanvas = colorCanvas;
+        // Layers 2-4: Color revelation layers - split into 3 RGB channel layers!
+        // These paint OVER the B&W layer with normal blending to replace it
+        // Red channel layer
+        this.colorCanvasR = this.add.renderTexture(0, 0, width, height);
+        this.colorCanvasR.setOrigin(0, 0);
+        this.colorCanvasR.fill(0x000000, 0);  // Start transparent
+        this.colorCanvasR.setDepth(200);
+        
+        // Green channel layer
+        this.colorCanvasG = this.add.renderTexture(0, 0, width, height);
+        this.colorCanvasG.setOrigin(0, 0);
+        this.colorCanvasG.fill(0x000000, 0);  // Start transparent
+        this.colorCanvasG.setDepth(201);
+        
+        // Blue channel layer
+        this.colorCanvasB = this.add.renderTexture(0, 0, width, height);
+        this.colorCanvasB.setOrigin(0, 0);
+        this.colorCanvasB.fill(0x000000, 0);  // Start transparent
+        this.colorCanvasB.setDepth(202);
+        
+        // Use ADD blend between color channels to mix them together
+        // But they use NORMAL blend over the B&W layer (default)
+        this.colorCanvasG.setBlendMode(Phaser.BlendModes.ADD);
+        this.colorCanvasB.setBlendMode(Phaser.BlendModes.ADD);
         
         // Create an off-screen canvas to read pixel data from the image
         // This is needed because Phaser doesn't have direct pixel access
@@ -151,10 +169,12 @@ export class DefogGame extends Phaser.Scene {
         const imageTexture = this.textures.get('hiddenImage').getSourceImage();
         this.imageContext.drawImage(imageTexture, 0, 0);
         
-        console.log('Two-layer revelation system created');
+        console.log('Three-channel revelation system created');
         console.log('Layer 1 (depth 199): B&W for monochromats');
-        console.log('Layer 2 (depth 200): Colors for color-vision insects');
-        console.log('Colors will ALWAYS stay on top!');
+        console.log('Layers 2-4 (depth 200-202): R, G, B channels');
+        console.log('Red uses NORMAL blend, Green/Blue use ADD to combine');
+        console.log('Color layers paint OVER B&W, replacing it with actual colors!');
+        console.log('Each channel accumulates independently based on spectral weights!');
     }
 
     createSpectrumIndicators(x, y, insectData) {
@@ -183,7 +203,7 @@ export class DefogGame extends Phaser.Scene {
                 barHeight, 
                 ch.color, 
                 0.8
-            ).setDepth(201);
+            ).setDepth(1003); // Above revelation layers
             bar.setStrokeStyle(1, 0xffffff, 0.5);
             indicators.push(bar);
         });
@@ -475,7 +495,7 @@ export class DefogGame extends Phaser.Scene {
         // Create the insect sprite
         const insectSprite = this.add.text(startX, startY, emoji, {
             fontSize: '28px'
-        }).setOrigin(0.5).setDepth(200);
+        }).setOrigin(0.5).setDepth(1000); // High depth to stay above all revelation layers!
         
         // Calculate realistic size scaling based on insect's actual size
         const sizeScale = this.getInsectSizeScale(insectData);
@@ -511,23 +531,23 @@ export class DefogGame extends Phaser.Scene {
             startX, lifespanBarY, 
             lifespanBarWidth, lifespanBarHeight, 
             0x440000, 0.6
-        ).setOrigin(0.5, 0.5).setDepth(201);
+        ).setOrigin(0.5, 0.5).setDepth(1001);
         
         // Foreground bar (green, will shrink over time)
         const lifespanBar = this.add.rectangle(
             startX, lifespanBarY, 
             lifespanBarWidth, lifespanBarHeight, 
             0x00ff00, 0.9
-        ).setOrigin(0.5, 0.5).setDepth(202);
+        ).setOrigin(0.5, 0.5).setDepth(1002);
         
         // Selection ring - scale with insect size (hidden by default)
         const ringRadius = 25 * sizeScale;
-        const selectionRing = this.add.circle(startX, startY, ringRadius, 0xffffff, 0).setDepth(251);
+        const selectionRing = this.add.circle(startX, startY, ringRadius, 0xffffff, 0).setDepth(1010);
         selectionRing.setStrokeStyle(3, 0x00ff00);
         selectionRing.setAlpha(0); // Hidden by default
         
         // Focus ring - slightly larger (REMOVED - we don't want it visible)
-        const focusRing = this.add.circle(startX, startY, ringRadius + 3, 0xffffff, 0).setDepth(250);
+        const focusRing = this.add.circle(startX, startY, ringRadius + 3, 0xffffff, 0).setDepth(1009);
         focusRing.setStrokeStyle(2, 0xffaa00, 0.5);
         focusRing.setAlpha(0); // Always hidden
         
@@ -1285,18 +1305,23 @@ export class DefogGame extends Phaser.Scene {
             
             // Sample a grid of pixels around the insect to paint inverted brightness
             const sampleRadius = Math.ceil(effectiveRadius);
-            const step = 4; // Sample every 4 pixels for performance
+            // Adaptive step size: larger radius = bigger steps for performance
+            const step = Math.max(4, Math.floor(sampleRadius / 12)); // Increased for better performance
             
             let pixelsPainted = 0;
+            
+            // Cache scale factors
+            const scaleX = this.hiddenImage.width / this.hiddenImage.displayWidth;
+            const scaleY = this.hiddenImage.height / this.hiddenImage.displayHeight;
             
             for (let dy = -sampleRadius; dy <= sampleRadius; dy += step) {
                 for (let dx = -sampleRadius; dx <= sampleRadius; dx += step) {
                     const dist = Math.sqrt(dx * dx + dy * dy);
                     if (dist > sampleRadius) continue;
                     
-                    // Calculate position in original image
-                    const px = Math.floor(imageX + (dx / this.hiddenImage.displayWidth) * this.hiddenImage.width);
-                    const py = Math.floor(imageY + (dy / this.hiddenImage.displayHeight) * this.hiddenImage.height);
+                    // Calculate position in original image (with cached scales)
+                    const px = Math.floor(imageX + dx * scaleX);
+                    const py = Math.floor(imageY + dy * scaleY);
                     
                     // Bounds check
                     if (px < 0 || px >= this.hiddenImage.width || py < 0 || py >= this.hiddenImage.height) continue;
@@ -1320,7 +1345,7 @@ export class DefogGame extends Phaser.Scene {
                     const alpha = (1 - dist / sampleRadius) * insect.focusLevel * 0.9;
                     
                     graphics.fillStyle(gray, alpha);
-                    graphics.fillCircle(x + dx, y + dy, step * 0.6);
+                    graphics.fillCircle(x + dx, y + dy, step * 0.5); // Reduced from 0.6 for less overdraw
                     
                     pixelsPainted++;
                 }
@@ -1336,24 +1361,33 @@ export class DefogGame extends Phaser.Scene {
             return;
         }
         
-        // COLOR INSECTS: Paint ACTUAL colors (not their perception!)
-        // The spectral weights determine WHICH areas they reveal, not HOW they paint them
-        const graphics = this.make.graphics();
+        // COLOR INSECTS: Paint each RGB channel separately with weight-based alpha
+        // Channels with low spectral sensitivity get low alpha (accumulate slowly)
+        // Channels with high spectral sensitivity get high alpha (accumulate quickly)
         
-        // Sample pixels and paint them with REAL colors from the image
         const sampleRadius = Math.ceil(effectiveRadius);
-        const step = 4;
+        // Adaptive step size: larger radius = bigger steps for performance
+        const step = Math.max(4, Math.floor(sampleRadius / 12)); // Increased for better performance
+        
+        // Create separate graphics for each channel
+        const graphicsR = this.make.graphics();
+        const graphicsG = this.make.graphics();
+        const graphicsB = this.make.graphics();
         
         let pixelsPainted = 0;
+        
+        // Cache scale factors
+        const scaleX = this.hiddenImage.width / this.hiddenImage.displayWidth;
+        const scaleY = this.hiddenImage.height / this.hiddenImage.displayHeight;
         
         for (let dy = -sampleRadius; dy <= sampleRadius; dy += step) {
             for (let dx = -sampleRadius; dx <= sampleRadius; dx += step) {
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist > sampleRadius) continue;
                 
-                // Calculate position in original image
-                const px = Math.floor(imageX + (dx / this.hiddenImage.displayWidth) * this.hiddenImage.width);
-                const py = Math.floor(imageY + (dy / this.hiddenImage.displayHeight) * this.hiddenImage.height);
+                // Calculate position in original image (with cached scales)
+                const px = Math.floor(imageX + dx * scaleX);
+                const py = Math.floor(imageY + dy * scaleY);
                 
                 // Bounds check
                 if (px < 0 || px >= this.hiddenImage.width || py < 0 || py >= this.hiddenImage.height) continue;
@@ -1364,42 +1398,54 @@ export class DefogGame extends Phaser.Scene {
                 const g = pixelData[1];
                 const b = pixelData[2];
                 
-                // Apply spectral weights to how MUCH of each color channel is revealed
-                // Insects with weak red sensitivity reveal red slowly (low alpha)
-                // Insects with strong green sensitivity reveal green quickly (high alpha)
-                const weightedR = r * weights.r;  // Weak red → slow red revelation
-                const weightedG = g * weights.g;  // Strong green → fast green revelation
-                const weightedB = b * weights.b;  // Medium blue → medium blue revelation
-                
-                // Paint the weighted color - unbalanced vision = unbalanced revelation
-                const color = Phaser.Display.Color.GetColor(
-                    Math.floor(weightedR), 
-                    Math.floor(weightedG), 
-                    Math.floor(weightedB)
-                );
-                
                 // Base alpha from distance and focus
-                const baseAlpha = (1 - dist / sampleRadius) * insect.focusLevel * 0.9;
+                const baseFalloff = (1 - dist / sampleRadius) * insect.focusLevel;
                 
-                // Calculate channel-specific alpha modulation
-                // Use the MAXIMUM weight to determine overall visibility
-                // But the color itself is already weighted
-                const maxWeight = Math.max(weights.r, weights.g, weights.b);
-                const channelAlpha = baseAlpha * (maxWeight / 1.0); // Normalize to strongest channel
+                // Each channel gets its own alpha based on spectral weight
+                // Low weight = low alpha = slow accumulation
+                // High weight = high alpha = fast accumulation
+                const alphaR = baseFalloff * weights.r * 0.3; // Increased for faster buildup
+                const alphaG = baseFalloff * weights.g * 0.3;
+                const alphaB = baseFalloff * weights.b * 0.3;
                 
-                graphics.fillStyle(color, channelAlpha);
-                graphics.fillCircle(x + dx, y + dy, step * 0.6);
+                // Paint each channel separately
+                // Red channel - paint only red component
+                if (r > 0 && alphaR > 0) {
+                    const redColor = Phaser.Display.Color.GetColor(r, 0, 0);
+                    graphicsR.fillStyle(redColor, alphaR);
+                    graphicsR.fillCircle(x + dx, y + dy, step * 0.5); // Reduced for less overdraw
+                }
+                
+                // Green channel - paint only green component
+                if (g > 0 && alphaG > 0) {
+                    const greenColor = Phaser.Display.Color.GetColor(0, g, 0);
+                    graphicsG.fillStyle(greenColor, alphaG);
+                    graphicsG.fillCircle(x + dx, y + dy, step * 0.5);
+                }
+                
+                // Blue channel - paint only blue component
+                if (b > 0 && alphaB > 0) {
+                    const blueColor = Phaser.Display.Color.GetColor(0, 0, b);
+                    graphicsB.fillStyle(blueColor, alphaB);
+                    graphicsB.fillCircle(x + dx, y + dy, step * 0.5);
+                }
                 
                 pixelsPainted++;
             }
         }
         
-        // Paint onto COLOR layer (depth 200 - ON TOP of B&W layer!)
-        this.colorCanvas.draw(graphics, 0, 0);
-        graphics.destroy();
+        // Paint each channel onto its respective layer
+        // ADD blend mode will combine them into full color
+        this.colorCanvasR.draw(graphicsR, 0, 0);
+        this.colorCanvasG.draw(graphicsG, 0, 0);
+        this.colorCanvasB.draw(graphicsB, 0, 0);
+        
+        graphicsR.destroy();
+        graphicsG.destroy();
+        graphicsB.destroy();
         
         if (pixelsPainted > 0 && Math.random() < 0.05) {
-            console.log(`🐝 ${insect.data.name} painted ${pixelsPainted} color pixels on top layer`);
+            console.log(`🐝 ${insect.data.name} painted ${pixelsPainted} pixels (alphas: r:${(weights.r * 0.15).toFixed(2)} g:${(weights.g * 0.15).toFixed(2)} b:${(weights.b * 0.15).toFixed(2)})`);
         }
     }
 }
