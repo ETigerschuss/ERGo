@@ -23,7 +23,7 @@ export class Start extends Phaser.Scene {
         this.add.rectangle(0, 0, width, height, 0x0a0a14).setOrigin(0);
 
         // Game title
-        this.add.text(width / 2, 60, 'ERGo! v0.02-dev', {
+        this.add.text(width / 2, 60, 'ERGo! v0.03-dev', {
             fontSize: '48px',
             color: '#ffaa00',
             fontStyle: 'bold'
@@ -53,18 +53,21 @@ export class Start extends Phaser.Scene {
             fontStyle: 'bold'
         }).setOrigin(0.5);
 
-        // Create 4 family panels in a 2x2 grid - FIT ALL 4 within 720px height
-        const panelWidth = 240;  // Reasonable width
-        const panelHeight = 250; // Fits 2 panels vertically: 150 + 250 + 15 + 250 = 665px
-        const spacing = 15;      // Tight spacing
+        // Create 4 family panels in a 2x2 grid
+        // Positions match game layout: Diptera TL, Lepidoptera TR, Hymenoptera BL, Coleoptera BR
+        const panelWidth = 220;  // Smaller boxes
+        const panelHeight = 240; // Increased to prevent emoji cropping
+        const spacing = 20;
         const startX = width / 2 - panelWidth - spacing / 2;
-        const startY = 150;      // Start position
+        const startY = 150;
 
+        // Rearranged positions to match game corners
+        // Family indices: [0: Hymenoptera, 1: Diptera, 2: Lepidoptera, 3: Coleoptera]
         const positions = [
-            { x: startX, y: startY },                               // Top-left: Hymenoptera
-            { x: startX + panelWidth + spacing, y: startY },       // Top-right: Diptera
-            { x: startX, y: startY + panelHeight + spacing },      // Bottom-left: Lepidoptera
-            { x: startX + panelWidth + spacing, y: startY + panelHeight + spacing } // Bottom-right: Coleoptera
+            { x: startX, y: startY + panelHeight + spacing },      // [0] Hymenoptera: Bottom-left
+            { x: startX, y: startY },                               // [1] Diptera: Top-left  
+            { x: startX + panelWidth + spacing, y: startY },       // [2] Lepidoptera: Top-right
+            { x: startX + panelWidth + spacing, y: startY + panelHeight + spacing } // [3] Coleoptera: Bottom-right
         ];
 
         // Species by family (matching game order, vision quality)
@@ -83,66 +86,57 @@ export class Start extends Phaser.Scene {
             const species = speciesByFamily[index];
             const firstSpecies = INSECT_DATABASE[species[0]];
 
-            // Panel background
+            // Panel background (clickable)
             const panel = this.add.rectangle(pos.x, pos.y, panelWidth, panelHeight, 0x16213e, 0.9)
                 .setOrigin(0)
-                .setStrokeStyle(3, 0x444444);
+                .setStrokeStyle(3, 0x444444)
+                .setInteractive({ useHandCursor: true });
 
-            // Family name and emoji
+            // Family emoji (BIGGER - 100px, centered)
             const centerX = pos.x + panelWidth / 2;
+            const centerY = pos.y + panelHeight / 2 + 35; // Extra offset to prevent emoji top cropping
             
             const familyEmoji = this.getFamilyEmoji(family);
-            this.add.text(centerX, pos.y + 25, familyEmoji, {
-                fontSize: '48px'
-            }).setOrigin(0.5);
+            const emojiText = this.add.text(centerX, centerY, familyEmoji, {
+                fontSize: '100px'  // Much bigger! (was 72px)
+            }).setOrigin(0.5, 0.35); // Adjusted Y origin to account for emoji ascent
+            
+            // Make emoji clickable too
+            emojiText.setInteractive({ useHandCursor: true });
+            
+            // Pulsing animation for emoji
+            this.tweens.add({
+                targets: emojiText,
+                scale: { from: 1, to: 1.1 },
+                duration: 1000,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
 
-            this.add.text(centerX, pos.y + 80, family, {
-                fontSize: '16px',
-                color: '#ffffff',
-                fontStyle: 'bold'
-            }).setOrigin(0.5);
-
-            // Key attributes
-            const attrs = this.formatAttributes(firstSpecies);
-            this.add.text(centerX, pos.y + 110, attrs, {
-                fontSize: '9px',
-                color: '#aaaaaa',
-                align: 'center',
-                lineSpacing: 2
-            }).setOrigin(0.5);
-
-            // "Click to Start" button
-            const button = this.add.rectangle(centerX, pos.y + 210, 180, 26, 0x00aa44, 0.8)
-                .setStrokeStyle(2, 0x00ff66);
-            button.setInteractive({ useHandCursor: true });
-
-            const buttonText = this.add.text(centerX, pos.y + 210, 'Click to Start', {
-                fontSize: '12px',
-                color: '#ffffff',
-                fontStyle: 'bold'
-            }).setOrigin(0.5);
-
-            // Hover effects
-            button.on('pointerover', () => {
-                button.setFillStyle(0x00cc55, 1);
+            // Hover effects on panel
+            panel.on('pointerover', () => {
                 panel.setStrokeStyle(3, 0x00ff66);
+                emojiText.setScale(1.15);
             });
 
-            button.on('pointerout', () => {
-                button.setFillStyle(0x00aa44, 0.8);
+            panel.on('pointerout', () => {
                 panel.setStrokeStyle(3, 0x444444);
+                emojiText.setScale(1);
             });
 
-            // Click handler
-            button.on('pointerdown', () => {
+            // Click handler on both panel and emoji
+            const clickHandler = () => {
                 this.selectFamily(index, family, species);
-            });
+            };
+            
+            panel.on('pointerdown', clickHandler);
+            emojiText.on('pointerdown', clickHandler);
 
             // Store panel
             this.familyPanels.push({ 
                 panel,
-                button, 
-                buttonText, 
+                emojiText,
                 family, 
                 index, 
                 species 

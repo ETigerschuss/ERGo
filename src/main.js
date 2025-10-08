@@ -1,6 +1,6 @@
 import { SplashScreen } from './scenes/SplashScreen.js';  // Initial splash screen
 import { Start } from './scenes/StartNew.js';  // Family selection UI
-import { DefogGame } from './scenes/DefogGameAdvanced.js';  // Advanced version: waypoints, multi-select, corner controls
+import { DefogGame } from './scenes/DefogGamev0.03.js';  // v0.03: All species visible in corners
 import { InsectSelection } from './scenes/InsectSelectionEnhanced.js';  // Enhanced version with spectral sensitivity
 
 const config = {
