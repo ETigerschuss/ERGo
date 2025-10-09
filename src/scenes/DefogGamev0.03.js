@@ -259,9 +259,9 @@ export class DefogGame extends Phaser.Scene {
         
         const cornerPositions = [
             { x: 10, y: this.imageBounds.bottom + 10, corner: 'bottom-left' },   // Hymenoptera - below image
-            { x: 10, y: 10, corner: 'top-left' },       // Diptera - top of screen
-            { x: width - 310, y: 10, corner: 'top-right' },  // Lepidoptera - top of screen (wider for 4 boxes)
-            { x: width - 310, y: this.imageBounds.bottom + 10, corner: 'bottom-right' } // Coleoptera - below image
+            { x: 10, y: 45, corner: 'top-left' },       // Diptera - moved down to avoid text (was 10)
+            { x: width - 570, y: 45, corner: 'top-right' },  // Lepidoptera - adjusted for wider boxes (was width - 320)
+            { x: width - 570, y: this.imageBounds.bottom + 10, corner: 'bottom-right' } // Coleoptera - adjusted for wider boxes
         ];
         
         // Short display names for UI
@@ -273,9 +273,9 @@ export class DefogGame extends Phaser.Scene {
             stag_beetle: 'Lucanus', firefly: 'Photinus', ladybug: 'Coccinella', rose_chafer: 'Cetonia'
         };
         
-        // Species box dimensions - more compact
-        const boxWidth = 72;
-        const boxHeight = 60; // Reduced from 80
+        // Species box dimensions - much larger for better visibility
+        const boxWidth = 137; // 80% wider (76 * 1.8 = 137)
+        const boxHeight = 100; // 25% taller (80 * 1.25 = 100)
         const spacing = 2;
         
         this.familyControls = [];
@@ -350,17 +350,20 @@ export class DefogGame extends Phaser.Scene {
                 const emojiX = boxX + 14; // Left side positioning
                 const emojiText = this.add.text(
                     emojiX, 
-                    emojiY + 3, // Offset down to prevent top cropping
+                    emojiY - 3, // Moved up more
                     emoji, 
-                    { fontSize: emojiSize }
-                ).setOrigin(0.5, 0.35).setDepth(3001); // Adjusted Y origin for emoji ascent
+                    { 
+                        fontSize: emojiSize,
+                        padding: { top: 4, bottom: 0 }
+                    }
+                ).setOrigin(0.5, 0.25).setDepth(3001); // Lower Y origin for emoji ascent
                 
                 // Sensitivity bars on RIGHT side (after emoji on left)
                 const weights = insectData.spectralWeights || { r: 0.33, g: 0.33, b: 0.33 };
                 const isMonochromat = insectData.colorSpectrum.length === 1;
-                const barWidth = 4;
-                const maxBarHeight = 10;
-                const barStartX = boxX + boxWidth - 18; // Right side of box
+                const barWidth = 24; // Double the width (was 12)
+                const maxBarHeight = 14; // Taller bars (was 10)
+                const barStartX = boxX + boxWidth - 34; // Moved left by one bar size (was -10)
                 
                 const sensitivityBars = [];
                 
@@ -404,7 +407,7 @@ export class DefogGame extends Phaser.Scene {
                         const barHeight = Math.max(2, weight * maxBarHeight);
                         
                         // All bars on RIGHT side, spaced horizontally
-                        const barX = barStartX - (2 - idx) * 6; // Right to left: R, G, B
+                        const barX = barStartX - (2 - idx) * 28; // Doubled spacing for doubled width (was 14)
                         
                         const bar = this.add.rectangle(
                             barX,
@@ -420,21 +423,22 @@ export class DefogGame extends Phaser.Scene {
                 }
                 
                 // Short name BELOW emoji and bars
-                const nameColor = isCurrent ? '#00ff00' : (isNext ? '#ffaa00' : '#888888');
+                const nameColor = isCurrent ? '#00ff00' : (isNext ? '#ffaa00' : '#ffffff');
                 const nameText = this.add.text(
                     boxX + boxWidth / 2,
-                    boxY + 30,
+                    boxY + 35,
                     shortNames[speciesId] || insectData.name,
                     {
-                        fontSize: '7px',
+                        fontSize: '18px', // Increased for better readability
                         color: nameColor,
-                        align: 'center'
+                        align: 'center',
+                        fontStyle: 'bold' // Make it bold for better visibility
                     }
                 ).setOrigin(0.5, 0.5).setDepth(3001);
                 
-                // Mini emoji container BELOW name row (freed up space!)
-                const miniEmojiY = boxY + 40;
-                const miniEmojiContainer = this.add.container(boxX, miniEmojiY).setDepth(3004);
+                // Mini emoji container BELOW name row - more space with much taller boxes
+                const miniEmojiY = boxY + 50; // Increased from 45 for 100px tall boxes
+                const miniEmojiContainer = this.add.container(boxX, miniEmojiY).setDepth(3010); // Higher depth than box (3000)
                 
                 // Store box data for later updates
                 const boxData = {
@@ -460,6 +464,11 @@ export class DefogGame extends Phaser.Scene {
                 // Attach click handler to ALL boxes (but only make current/next interactive)
                 box.on('pointerdown', (pointer) => {
                     console.log(`📦 BOX CLICK HANDLER FIRED for ${boxData.speciesId}`);
+                    // Don't handle box click if a mini-emoji was just clicked
+                    if (this.miniEmojiClicked) {
+                        console.log(`⚠️ Ignoring box click - mini-emoji was clicked`);
+                        return;
+                    }
                     if (!pointer.event.shiftKey && !pointer.event.ctrlKey) {
                         // Stop event propagation to prevent insect selection
                         if (pointer.event && pointer.event.stopPropagation) {
@@ -616,8 +625,8 @@ export class DefogGame extends Phaser.Scene {
             const emoji = this.getSpeciesEmoji(boxData.speciesId);
             
             toShow.forEach((insect, index) => {
-                const miniX = (index % 5) * 14 + 2; // 5 per row
-                const miniY = Math.floor(index / 5) * 14;
+                const miniX = (index % 5) * 18 + 2; // 5 per row, increased spacing to 18px
+                const miniY = Math.floor(index / 5) * 18; // Increased vertical spacing too
                 
                 // Create tiny lifespan circle around mini-emoji
                 const lifespanRatio = 1 - (insect.age / insect.lifespan);
@@ -656,9 +665,11 @@ export class DefogGame extends Phaser.Scene {
                 insect.miniLifespanCircle = circleGraphics;
                 insect.miniLifespanCirclePos = { x: miniX + circleRadius, y: miniY + circleRadius };
                 
-                const miniEmoji = this.add.text(miniX + circleRadius, miniY + circleRadius + 1.5, emoji, {
-                    fontSize: '12px'
-                }).setOrigin(0.5, 0.35).setDepth(2004); // Adjusted Y origin for emoji ascent
+                // Create mini-emoji text (positioned relative to container)
+                const miniEmoji = this.add.text(miniX + circleRadius, miniY + circleRadius - 6, emoji, {
+                    fontSize: '12px',
+                    padding: { top: 2, bottom: 0 }
+                }).setOrigin(0.5, 0.5).setDepth(3015); // Changed to 0.5, 0.5 for centered hit area
                 
                 // Highlight if this insect is currently selected
                 if (insect.isSelected) {
@@ -666,10 +677,23 @@ export class DefogGame extends Phaser.Scene {
                     miniEmoji.setScale(1.3);
                 }
                 
-                // Make clickable
-                miniEmoji.setInteractive({ useHandCursor: true });
-                miniEmoji.on('pointerdown', () => {
+                // Make clickable with explicit hit area and cursor - moved down significantly
+                const hitArea = new Phaser.Geom.Rectangle(-8, 4, 16, 16); // Moved Y from -8 to 4 (12px down)
+                miniEmoji.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
+                miniEmoji.input.cursor = 'pointer';
+                miniEmoji.on('pointerdown', (pointer) => {
+                    console.log(`🐛 MINI-EMOJI CLICK for ${insect.insectId}`);
+                    // Mark that a mini-emoji was clicked to prevent box click
+                    this.miniEmojiClicked = true;
+                    // Stop event propagation to prevent box click handler from firing
+                    if (pointer.event) {
+                        pointer.event.stopPropagation();
+                    }
                     this.selectInsectFromMini(insect);
+                    // Reset flag after a very short delay
+                    this.time.delayedCall(10, () => {
+                        this.miniEmojiClicked = false;
+                    });
                 });
                 
                 // Hover effect
@@ -684,6 +708,7 @@ export class DefogGame extends Phaser.Scene {
                     }
                 });
                 
+                // Add to container for proper positioning
                 boxData.miniEmojiContainer.add(miniEmoji);
                 boxData.miniEmojis.push(miniEmoji);
             });
@@ -703,7 +728,7 @@ export class DefogGame extends Phaser.Scene {
     
     selectInsectFromMini(insect) {
         // Select an insect by clicking its mini emoji
-        console.log(`Selected insect from mini emoji: ${insect.insectId}`);
+        console.log(`🎯 Selected insect from mini emoji: ${insect.insectId}, index: ${insect.index}`);
         
         // Deselect all insects and hide their indicators
         this.insects.forEach(i => {
@@ -719,6 +744,7 @@ export class DefogGame extends Phaser.Scene {
         
         // Select this insect and show indicators
         insect.isSelected = true;
+        console.log(`✅ Insect ${insect.insectId} marked as selected`);
         // DON'T show selection ring - only lifespan circle
         insect.selectionRing.setAlpha(0);
         
@@ -734,6 +760,9 @@ export class DefogGame extends Phaser.Scene {
         
         // Show path if waypoints exist
         this.redrawInsectPath(insect);
+        
+        // Update mini-emojis to reflect new selection
+        this.updateMiniEmojis();
     }
     
     redrawInsectPath(insect) {
@@ -1050,7 +1079,7 @@ export class DefogGame extends Phaser.Scene {
                 
                 // Update loading bar if current box exists
                 if (currentBox && currentBox.loadingBarFill) {
-                    const boxWidth = 72; // Same as species box width
+                    const boxWidth = 137; // Same as species box width (updated to 137)
                     currentBox.loadingBarFill.width = boxWidth * progress;
                 }
             }
@@ -1101,8 +1130,9 @@ export class DefogGame extends Phaser.Scene {
         
         // Create the insect sprite
         const insectSprite = this.add.text(startX, startY, emoji, {
-            fontSize: '28px'
-        }).setOrigin(0.5).setDepth(1000); // High depth to stay above all revelation layers!
+            fontSize: '28px',
+            padding: { top: 4, bottom: 0 } // Prevent emoji top cropping
+        }).setOrigin(0.5, 0.25).setDepth(1000); // Adjusted Y origin for emoji ascent
         
         // Calculate realistic size scaling based on insect's actual size
         const sizeScale = this.getInsectSizeScale(insectData);
@@ -1505,10 +1535,29 @@ export class DefogGame extends Phaser.Scene {
         this.input.on('pointerdown', (pointer) => {
             console.log(`🖱️ CLICK at (${pointer.x}, ${pointer.y})`);
             
+            // Check if we clicked on a mini-emoji first
+            const clickedObjects = this.input.hitTestPointer(pointer);
+            if (clickedObjects.length > 0) {
+                // Check if any clicked object is a mini-emoji (check all species boxes)
+                const clickedMiniEmoji = this.speciesBoxes?.some(boxData => {
+                    return boxData.miniEmojis?.some(miniEmoji => clickedObjects.includes(miniEmoji));
+                });
+                
+                if (clickedMiniEmoji) {
+                    console.log('⚠️ Ignoring global click - mini-emoji was clicked');
+                    return; // Exit early - let mini-emoji handler deal with it
+                }
+            }
+            
+            // Check if a mini-emoji was just clicked - if so, skip ALL processing
+            if (this.miniEmojiClicked) {
+                console.log('⚠️ Ignoring global click - mini-emoji flag set');
+                return;
+            }
+            
             // Check if we clicked on an interactive game object (like a species box)
             // If so, skip our processing and let that object's handler deal with it
             let clickOnSpeciesBox = false;
-            const clickedObjects = this.input.hitTestPointer(pointer);
             if (clickedObjects.length > 0) {
                 // Check if any clicked object is a species box
                 clickOnSpeciesBox = clickedObjects.some(obj => {
@@ -1672,6 +1721,11 @@ export class DefogGame extends Phaser.Scene {
             const hasSelection = this.selectedInsectIndices.length > 0;
             const currentlySelectedIndex = hasSelection ? this.selectedInsectIndices[0] : null;
             const clickedOnInsect = clickedInsectIndex !== null;
+            
+            // Debug logging
+            if (!clickedOnInsect) {
+                console.log(`🖱️ Click on empty area - hasSelection: ${hasSelection}, selectedIndices: [${this.selectedInsectIndices}]`);
+            }
             
             if (clickedOnInsect) {
                 const clickedSameInsect = (clickedInsectIndex === currentlySelectedIndex);
@@ -1933,6 +1987,10 @@ export class DefogGame extends Phaser.Scene {
         // Track if we need to update mini emojis
         let insectsChanged = false;
         
+        // IMPORTANT: Capture selected insects BEFORE filtering
+        const oldSelectedIndices = [...this.selectedInsectIndices];
+        const selectedInsects = oldSelectedIndices.map(idx => this.insects[idx]).filter(i => i && i.sprite); // Get actual insect objects
+        
         // Age insects and remove dead ones
         this.insects = this.insects.filter(insect => {
             insect.age += delta;
@@ -2017,10 +2075,7 @@ export class DefogGame extends Phaser.Scene {
             return true; // Keep alive
         });
         
-        // Update indices after filtering and maintain selection
-        const oldSelectedIndices = [...this.selectedInsectIndices];
-        const selectedInsects = oldSelectedIndices.map(idx => this.insects[idx]).filter(i => i); // Get actual insect objects
-        
+        // Update indices after filtering (selectedInsects already captured before filter)
         this.insects.forEach((insect, newIdx) => {
             const oldIdx = insect.index;
             insect.index = newIdx;
@@ -2033,6 +2088,22 @@ export class DefogGame extends Phaser.Scene {
         selectedInsects.forEach(selectedInsect => {
             if (selectedInsect && selectedInsect.index !== undefined) {
                 this.selectedInsectIndices.push(selectedInsect.index);
+                
+                // Make sure visual indicators are shown
+                selectedInsect.isSelected = true;
+                selectedInsect.lifespanCircle.setVisible(true);
+                selectedInsect.lifespanCircleBg.setAlpha(1);
+                selectedInsect.selectionRing.setAlpha(0); // Keep ring hidden
+                
+                // Redraw path if exists
+                if (selectedInsect.waypoints && selectedInsect.waypoints.length > 0) {
+                    this.drawPath(selectedInsect);
+                }
+                
+                // Force mini-emoji update to show selection
+                insectsChanged = true;
+                
+                console.log(`✅ Preserved selection: ${selectedInsect.data.name} at new index ${selectedInsect.index}`);
             }
         });
         

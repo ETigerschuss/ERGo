@@ -92,14 +92,15 @@ export class Start extends Phaser.Scene {
                 .setStrokeStyle(3, 0x444444)
                 .setInteractive({ useHandCursor: true });
 
-            // Family emoji (BIGGER - 100px, centered)
+            // Family emoji (MUCH BIGGER - 130px, positioned way up)
             const centerX = pos.x + panelWidth / 2;
-            const centerY = pos.y + panelHeight / 2 + 35; // Extra offset to prevent emoji top cropping
+            const centerY = pos.y + panelHeight / 2 - 25; // Way up!
             
             const familyEmoji = this.getFamilyEmoji(family);
             const emojiText = this.add.text(centerX, centerY, familyEmoji, {
-                fontSize: '100px'  // Much bigger! (was 72px)
-            }).setOrigin(0.5, 0.35); // Adjusted Y origin to account for emoji ascent
+                fontSize: '130px',  // Much bigger!
+                padding: { top: 20, bottom: 0 } // Add top padding to prevent cropping
+            }).setOrigin(0.5, 0.25); // Lower Y origin to account for emoji ascent
             
             // Make emoji clickable too
             emojiText.setInteractive({ useHandCursor: true });
@@ -217,19 +218,20 @@ export class Start extends Phaser.Scene {
 
             const centerX = posX + cardWidth / 2;
 
-            // Species number and emoji/image
-            const numberText = this.add.text(centerX, startY + 25, `${index + 1}/4`, {
-                fontSize: '14px',
-                color: isFirst ? '#00ff66' : '#666666',
-                fontStyle: 'bold'
-            }).setOrigin(0.5);
-            this.speciesElements.push(numberText);
+            // Species number removed to prevent emoji cropping
+            // const numberText = this.add.text(centerX, startY + 25, `${index + 1}/4`, {
+            //     fontSize: '14px',
+            //     color: isFirst ? '#00ff66' : '#666666',
+            //     fontStyle: 'bold'
+            // }).setOrigin(0.5);
+            // this.speciesElements.push(numberText);
 
             // Species emoji
             const speciesEmoji = this.getSpeciesEmoji(speciesId);
             const emojiText = this.add.text(centerX, startY + 60, speciesEmoji, {
-                fontSize: '48px'
-            }).setOrigin(0.5);
+                fontSize: '48px',
+                padding: { top: 8, bottom: 0 } // Prevent emoji top cropping
+            }).setOrigin(0.5, 0.25); // Adjusted Y origin for emoji ascent
             this.speciesElements.push(emojiText);
 
             // Species name
