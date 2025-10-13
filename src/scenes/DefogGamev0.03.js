@@ -1118,17 +1118,29 @@ export class DefogGame extends Phaser.Scene {
             return;
         }
         
-        // Calculate how many to spawn (ALL AT ONCE)
-        const familyIdx = this.familyProgression.currentFamilyInRound;
-        const sizeRound = this.familyProgression.currentRound;
+        // Calculate how many to spawn based on actual insect body size
+        // Smaller insects spawn more individuals to balance gameplay
+        let spawnsNeeded;
         
-        let spawnsNeeded = 3; // Default
-        if (insectId === 'ant') spawnsNeeded = 10;
-        else if (insectId === 'stag_beetle') spawnsNeeded = 1;
-        else if (familyIdx === 2) spawnsNeeded = 1; // Lepidoptera
-        else if (sizeRound === 0) spawnsNeeded = 5;
-        else if (sizeRound === 1) spawnsNeeded = 4;
-        else if (sizeRound >= 2) spawnsNeeded = 3;
+        // Size-based spawn counts (based on actual body length)
+        if (insectId === 'ant') spawnsNeeded = 10; // 4-11mm - smallest
+        else if (insectId === 'mosquito' || insectId === 'vinegar_fly') spawnsNeeded = 8; // 2-10mm, 2-3mm
+        else if (insectId === 'ladybug') spawnsNeeded = 7; // 5.5-8mm
+        else if (insectId === 'honeybee') spawnsNeeded = 5; // 11-18mm
+        else if (insectId === 'housefly') spawnsNeeded = 5; // 8-12mm
+        else if (insectId === 'firefly') spawnsNeeded = 4; // 10-20mm
+        else if (insectId === 'bumblebee') spawnsNeeded = 3; // 11-28mm
+        else if (insectId === 'hoverfly') spawnsNeeded = 3; // 15mm
+        else if (insectId === 'hornet') spawnsNeeded = 2; // 18-35mm
+        else if (insectId === 'horsefly' || insectId === 'robber_fly') spawnsNeeded = 2; // 20-30mm
+        else if (insectId === 'rose_chafer') spawnsNeeded = 2; // Medium beetle
+        // All large insects: 1 individual only
+        else if (insectId === 'stag_beetle') spawnsNeeded = 1; // 30-75mm - very large
+        else if (insectId === 'hawk_moth') spawnsNeeded = 1; // 40-50mm
+        else if (insectId === 'monarch') spawnsNeeded = 1; // 90-100mm - largest
+        else if (insectId === 'peacock') spawnsNeeded = 1; // 50-55mm
+        else if (insectId === 'cabbage_white') spawnsNeeded = 1; // 32-47mm
+        else spawnsNeeded = 2; // Default for any others
         
         console.log(`Spawning ALL ${spawnsNeeded} ${insectData.name} simultaneously`);
         
@@ -2121,6 +2133,12 @@ export class DefogGame extends Phaser.Scene {
                 selectedInsect.lifespanCircle.setVisible(true);
                 selectedInsect.lifespanCircleBg.setAlpha(1);
                 selectedInsect.selectionRing.setAlpha(0); // Keep ring hidden
+                
+                // IMPORTANT: Preserve user control when selection transfers
+                // This ensures the next click controls this insect, not "command all"
+                if (selectedInsect.userControlled) {
+                    selectedInsect.userControlled = true; // Keep user control flag
+                }
                 
                 // Redraw path if exists
                 if (selectedInsect.waypoints && selectedInsect.waypoints.length > 0) {
