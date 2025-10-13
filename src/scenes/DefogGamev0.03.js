@@ -1094,35 +1094,10 @@ export class DefogGame extends Phaser.Scene {
             }
         });
         
-        // After countdown, spawn ALL insects of this species simultaneously
+        // After countdown, spawn the insect
         this.time.delayedCall(totalSeconds * 1000, () => {
-            this.spawnAllInsectsForCurrentSpecies();
-        });
-    }
-
-    spawnAllInsectsForCurrentSpecies() {
-        // Determine how many insects to spawn for current species
-        const familyIdx = this.familyProgression.currentFamilyInRound;
-        const sizeRound = this.familyProgression.currentRound;
-        const currentSpecies = this.speciesByFamily[familyIdx][sizeRound];
-        
-        let spawnsNeeded = 3; // Default
-        if (currentSpecies === 'ant') spawnsNeeded = 10;
-        else if (currentSpecies === 'stag_beetle') spawnsNeeded = 1;
-        else if (familyIdx === 2) spawnsNeeded = 1; // Lepidoptera
-        else if (sizeRound === 0) spawnsNeeded = 5;
-        else if (sizeRound === 1) spawnsNeeded = 4;
-        else if (sizeRound >= 2) spawnsNeeded = 3;
-        
-        console.log(`Spawning ALL ${spawnsNeeded} insects of ${currentSpecies} simultaneously`);
-        
-        // Spawn all insects at once
-        for (let i = 0; i < spawnsNeeded; i++) {
             this.spawnInsectFromPanel();
-        }
-        
-        // Move to next species
-        this.progressToNextSpecies();
+        });
     }
 
     spawnInsectFromPanel() {
@@ -1135,8 +1110,6 @@ export class DefogGame extends Phaser.Scene {
         }
         
         const insectId = this.currentSpeciesId;
-        console.log(`Attempting to spawn insectId: ${insectId}, Round: ${this.familyProgression.currentRound}, Family: ${this.familyProgression.currentFamilyInRound}`);
-        
         const insectData = INSECT_DATABASE[insectId];
         
         if (!insectData) {
@@ -1145,16 +1118,64 @@ export class DefogGame extends Phaser.Scene {
             return;
         }
         
+        // Calculate how many to spawn (ALL AT ONCE)
+        const familyIdx = this.familyProgression.currentFamilyInRound;
+        const sizeRound = this.familyProgression.currentRound;
+        
+        let spawnsNeeded = 3; // Default
+        if (insectId === 'ant') spawnsNeeded = 10;
+        else if (insectId === 'stag_beetle') spawnsNeeded = 1;
+        else if (familyIdx === 2) spawnsNeeded = 1; // Lepidoptera
+        else if (sizeRound === 0) spawnsNeeded = 5;
+        else if (sizeRound === 1) spawnsNeeded = 4;
+        else if (sizeRound >= 2) spawnsNeeded = 3;
+        
+        console.log(`Spawning ALL ${spawnsNeeded} ${insectData.name} simultaneously`);
+        
         const emoji = this.getSpeciesEmoji(insectId);
-        
-        console.log(`Spawning ${insectData.name} (#${this.familyProgression.spawnCountForCurrentSpecies + 1}/5)`);
-        
-        // Spawn at panel position
         const startX = activePanel.spawnPosition.x;
         const startY = activePanel.spawnPosition.y;
         
+        // Check if there's a programmed waypoint for this species
+        const speciesBox = this.speciesBoxes?.find(box => box.speciesId === insectId);
+        const programmedWaypoint = speciesBox?.programmedWaypoint || null;
+        
+        // Spawn all individuals at once
+        for (let i = 0; i < spawnsNeeded; i++) {
+            this.spawnSingleInsect(insectData, insectId, emoji, startX, startY, programmedWaypoint);
+        }
+        
+        // Clear programmed waypoint after using it (one-time use for whole group)
+        if (programmedWaypoint && speciesBox) {
+            speciesBox.programmedWaypoint = null;
+            speciesBox.waypointIndicator.setVisible(false);
+            if (speciesBox.waypointMarker) {
+                speciesBox.waypointMarker.destroy();
+                speciesBox.waypointMarker = null;
+            }
+            console.log(`Waypoint cleared after spawning ${spawnsNeeded} insects`);
+        }
+        
+        // Update mini emoji display
+        this.updateMiniEmojis();
+        
+        // Progress to next species
+        this.familyProgression.spawnCountForCurrentSpecies = spawnsNeeded;
+        this.progressToNextSpecies();
+        
+        // Start next spawn timer
+        this.startSpawnTimer(12);
+    }
+
+    spawnSingleInsect(insectData, insectId, emoji, startX, startY, programmedWaypoint = null) {
+        // Spawn at panel position with slight random offset to avoid complete overlap
+        const offsetX = (Math.random() - 0.5) * 30;
+        const offsetY = (Math.random() - 0.5) * 30;
+        const spawnX = startX + offsetX;
+        const spawnY = startY + offsetY;
+        
         // Create the insect sprite
-        const insectSprite = this.add.text(startX, startY, emoji, {
+        const insectSprite = this.add.text(spawnX, spawnY, emoji, {
             fontSize: '28px',
             padding: { top: 4, bottom: 0 } // Prevent emoji top cropping
         }).setOrigin(0.5, 0.25).setDepth(1000); // Adjusted Y origin for emoji ascent
@@ -1181,14 +1202,14 @@ export class DefogGame extends Phaser.Scene {
         // Individual sprite handlers are REMOVED to prevent auto-selection bugs
         
         // Create spectrum indicators (HIDDEN by default - only show when selected)
-        const spectrumIndicators = this.createSpectrumIndicators(startX, startY + 30, insectData);
+        const spectrumIndicators = this.createSpectrumIndicators(spawnX, spawnY + 30, insectData);
         spectrumIndicators.forEach(ind => ind.setVisible(false));
         
         // Circular lifespan indicator around insect (HIDDEN by default)
         const ringRadius = 25 * sizeScale;
         
         // Background circle (dark red/gray)
-        const lifespanCircleBg = this.add.circle(startX, startY, ringRadius + 4, 0x000000, 0).setDepth(1009);
+        const lifespanCircleBg = this.add.circle(spawnX, spawnY, ringRadius + 4, 0x000000, 0).setDepth(1009);
         lifespanCircleBg.setStrokeStyle(2, 0x440000, 0.4);
         lifespanCircleBg.setAlpha(0); // Hidden by default
         
@@ -1197,12 +1218,12 @@ export class DefogGame extends Phaser.Scene {
         lifespanCircle.setVisible(false); // Hidden by default
         
         // Selection ring - scale with insect size (hidden by default)
-        const selectionRing = this.add.circle(startX, startY, ringRadius, 0xffffff, 0).setDepth(1011);
+        const selectionRing = this.add.circle(spawnX, spawnY, ringRadius, 0xffffff, 0).setDepth(1011);
         selectionRing.setStrokeStyle(3, 0x00ff00);
         selectionRing.setAlpha(0); // Hidden by default
         
         // Focus ring - slightly larger (REMOVED - we don't want it visible)
-        const focusRing = this.add.circle(startX, startY, ringRadius + 3, 0xffffff, 0).setDepth(1008);
+        const focusRing = this.add.circle(spawnX, spawnY, ringRadius + 3, 0xffffff, 0).setDepth(1008);
         focusRing.setStrokeStyle(2, 0xffaa00, 0.5);
         focusRing.setAlpha(0); // Always hidden
         
@@ -1228,10 +1249,10 @@ export class DefogGame extends Phaser.Scene {
             currentWaypoint: null,
             pathGraphics: pathGraphics,
             timeAtPosition: 0,
-            lastPosition: { x: startX, y: startY },
+            lastPosition: { x: spawnX, y: spawnY },
             focusLevel: 0.5, // Start with base focus so insects can defog while moving
-            lastDefogX: startX,
-            lastDefogY: startY,
+            lastDefogX: spawnX,
+            lastDefogY: spawnY,
             lastDefogLevel: 0,
             randomWalkMode: true,
             randomWalkTimer: 0,
@@ -1241,40 +1262,16 @@ export class DefogGame extends Phaser.Scene {
         
         this.insects.push(insect);
         
-        // Check if there's a programmed waypoint for this species (ONE-TIME USE)
-        const speciesBox = this.speciesBoxes?.find(box => box.speciesId === insectId);
-        if (speciesBox && speciesBox.programmedWaypoint) {
-            // Use programmed waypoint for THIS ONE insect
-            insect.waypoints = [speciesBox.programmedWaypoint];
+        // Use programmed waypoint if provided, otherwise add random waypoint
+        if (programmedWaypoint) {
+            insect.waypoints = [programmedWaypoint];
             insect.randomWalkMode = false;
             insect.userControlled = true;
-            
-            // Draw the path
             this.drawPath(insect);
-            
-            console.log(`✓ ${insectData.name} spawned with programmed waypoint at (${speciesBox.programmedWaypoint.x}, ${speciesBox.programmedWaypoint.y})`);
-            
-            // CLEAR the waypoint after using it (one-time use only)
-            speciesBox.programmedWaypoint = null;
-            speciesBox.waypointIndicator.setVisible(false);
-            if (speciesBox.waypointMarker) {
-                speciesBox.waypointMarker.destroy();
-                speciesBox.waypointMarker = null;
-            }
-            console.log(`   Waypoint cleared - ready for next programming`);
         } else {
             // Add random waypoint to start walking
             this.addRandomWaypoint(insect);
         }
-        
-        // Update mini emoji display (new insect spawned)
-        this.updateMiniEmojis();
-        
-        // Progress to next species
-        this.progressToNextSpecies();
-        
-        // Start next spawn timer (12 seconds to prevent lag)
-        this.startSpawnTimer(12);
     }
 
     addRandomWaypoint(insect) {
@@ -1288,52 +1285,83 @@ export class DefogGame extends Phaser.Scene {
     }
 
     progressToNextSpecies() {
-        // Species complete - move to next one
-        this.familyProgression.currentFamilyInRound++;
-        this.familyProgression.familiesCompletedInRound++;
+        this.familyProgression.spawnCountForCurrentSpecies++;
         
-        // Wrap family index to 0-3 range
-        if (this.familyProgression.currentFamilyInRound >= 4) {
-            this.familyProgression.currentFamilyInRound = 0;
+        // Update progress display
+        const activePanel = this.familyControls.find(c => c.familyIndex === this.familyProgression.currentFamilyIndex);
+        if (activePanel && activePanel.statsText) {
+            const totalSpawns = this.familyProgression.currentFamilyIndex * 20 + this.familyProgression.currentSpeciesInFamily * 5 + this.familyProgression.spawnCountForCurrentSpecies;
+            activePanel.statsText.setText(`Progress: ${totalSpawns}/80`);
         }
         
-        // After cycling through all 4 families, move to next round
-        if (this.familyProgression.familiesCompletedInRound >= 4) {
-            this.familyProgression.familiesCompletedInRound = 0;
-            this.familyProgression.currentRound++;
-            
-            console.log(`Round ${this.familyProgression.currentRound - 1} complete! Moving to Round ${this.familyProgression.currentRound} (next vision tier)`);
-            
-            // After all 4 rounds (all vision levels), loop back to start
-            if (this.familyProgression.currentRound >= 4) {
-                this.familyProgression.currentRound = 0;
-                console.log('All vision levels complete! Looping back to simplest vision.');
-            }
-        }
-        
-        // Update current species ID
+        // After spawning the appropriate number, move to next species
+        // Spawn counts based on actual insect body size for balance:
+        // - Tiny insects (ant 4-11mm): 10 spawns (equivalent to 1 stag beetle)
+        // - Small insects (honeybee 11-18mm, ladybug 5-8mm): 5 spawns
+        // - Medium insects (bumblebee 11-28mm, firefly 10-20mm): 3 spawns
+        // - Large Lepidoptera (hawk moth 40-50mm, monarch 90-100mm): 1 spawn each
+        // - Very large beetles (stag beetle 30-75mm): 2 spawns
         const familyIdx = this.familyProgression.currentFamilyInRound;
         const sizeRound = this.familyProgression.currentRound;
-        this.currentSpeciesId = this.speciesByFamily[familyIdx][sizeRound];
+        const currentSpecies = this.speciesByFamily[familyIdx][sizeRound];
         
-        // Calculate next spawn count
-        const nextSpecies = this.currentSpeciesId;
-        let nextSpawnsNeeded = 3; // Default
-        if (nextSpecies === 'ant') nextSpawnsNeeded = 10; // Tiny
-        else if (nextSpecies === 'stag_beetle') nextSpawnsNeeded = 1; // Very large beetle - only 1!
-        else if (familyIdx === 2) nextSpawnsNeeded = 1; // All Lepidoptera
-        else if (sizeRound === 0) nextSpawnsNeeded = 5; // Small starting insects
-        else if (sizeRound === 1) nextSpawnsNeeded = 4; // Medium-small
-        else if (sizeRound >= 2) nextSpawnsNeeded = 3; // Medium-large
+        // Define spawn counts per species for balanced gameplay
+        let spawnsNeeded = 3; // Default
+        if (currentSpecies === 'ant') spawnsNeeded = 10; // Tiny - 10 ants = 1 stag beetle
+        else if (currentSpecies === 'stag_beetle') spawnsNeeded = 1; // Very large beetle - only 1!
+        else if (familyIdx === 2) spawnsNeeded = 1; // All Lepidoptera are large (40-100mm)
+        else if (sizeRound === 0) spawnsNeeded = 5; // Small starting insects (mosquito, firefly)
+        else if (sizeRound === 1) spawnsNeeded = 4; // Medium-small insects
+        else if (sizeRound >= 2) spawnsNeeded = 3; // Medium-large insects
         
-        const familyName = SUPERFAMILIES[familyIdx];
-        console.log(`Next species: ${this.currentSpeciesId} (${familyName}, Round ${sizeRound}) - will spawn ${nextSpawnsNeeded}x`);
-        
-        // Update species box highlights (NEW for v0.03!)
-        this.updateSpeciesBoxHighlights();
-        
-        // Start timer for next spawn
-        this.startSpawnTimer(12);
+        if (this.familyProgression.spawnCountForCurrentSpecies >= spawnsNeeded) {
+            this.familyProgression.spawnCountForCurrentSpecies = 0;
+            this.familyProgression.currentFamilyInRound++;
+            this.familyProgression.familiesCompletedInRound++;
+            
+            // Wrap family index to 0-3 range
+            if (this.familyProgression.currentFamilyInRound >= 4) {
+                this.familyProgression.currentFamilyInRound = 0;
+            }
+            
+            // After cycling through all 4 families, move to next round
+            if (this.familyProgression.familiesCompletedInRound >= 4) {
+                this.familyProgression.familiesCompletedInRound = 0;
+                this.familyProgression.currentRound++;
+                
+                console.log(`Round ${this.familyProgression.currentRound - 1} complete! Moving to Round ${this.familyProgression.currentRound} (next vision tier)`);
+                
+                // After all 4 rounds (all vision levels), loop back to start
+                if (this.familyProgression.currentRound >= 4) {
+                    this.familyProgression.currentRound = 0;
+                    console.log('All vision levels complete! Looping back to simplest vision.');
+                }
+            }
+            
+            // Update current species ID
+            const familyIdx = this.familyProgression.currentFamilyInRound;
+            const sizeRound = this.familyProgression.currentRound;
+            this.currentSpeciesId = this.speciesByFamily[familyIdx][sizeRound];
+            
+            // Calculate next spawn count
+            const nextSpecies = this.currentSpeciesId;
+            let nextSpawnsNeeded = 3; // Default
+            if (nextSpecies === 'ant') nextSpawnsNeeded = 10; // Tiny
+            else if (nextSpecies === 'stag_beetle') nextSpawnsNeeded = 1; // Very large beetle - only 1!
+            else if (familyIdx === 2) nextSpawnsNeeded = 1; // All Lepidoptera
+            else if (sizeRound === 0) nextSpawnsNeeded = 5; // Small starting insects
+            else if (sizeRound === 1) nextSpawnsNeeded = 4; // Medium-small
+            else if (sizeRound >= 2) nextSpawnsNeeded = 3; // Medium-large
+            
+            const familyName = SUPERFAMILIES[familyIdx];
+            console.log(`Next species: ${this.currentSpeciesId} (${familyName}, Round ${sizeRound}) - will spawn ${nextSpawnsNeeded}x`);
+            
+            // Update species box highlights (NEW for v0.03!)
+            this.updateSpeciesBoxHighlights();
+            
+            // Update active panel display (REMOVED - we don't use panels in v0.03)
+            // this.updateActivePanelDisplay();
+        }
     }
 
     // OLD v0.02 - not needed in v0.03 since all families are visible from start
@@ -1978,14 +2006,10 @@ export class DefogGame extends Phaser.Scene {
     }
 
     update(time, delta) {
-        // Performance optimization: Skip update if delta is too large (tab was inactive)
-        if (delta > 1000) {
-            console.log('⏭️ Skipping large delta update (tab was inactive)');
-            return;
-        }
-        
-        // Performance optimization: Limit delta to prevent huge jumps
-        delta = Math.min(delta, 100);
+        // Performance optimization: Skip every other frame for defogging when many insects
+        if (!this.updateFrameCounter) this.updateFrameCounter = 0;
+        this.updateFrameCounter++;
+        const skipDefogFrame = this.insects.length > 20 && this.updateFrameCounter % 2 === 0;
         
         // Track if we need to update mini emojis
         let insectsChanged = false;
@@ -2170,11 +2194,13 @@ export class DefogGame extends Phaser.Scene {
             }
             
             // Defog continuously as insect moves (especially important for monochromats)
-            // They need to reveal the world as they walk!
-            this.defogAtInsect(insect);
-            insect.lastDefogX = insect.sprite.x;
-            insect.lastDefogY = insect.sprite.y;
-            insect.lastDefogLevel = insect.focusLevel;
+            // Performance: Skip defogging on some frames when there are many insects
+            if (!skipDefogFrame) {
+                this.defogAtInsect(insect);
+                insect.lastDefogX = insect.sprite.x;
+                insect.lastDefogY = insect.sprite.y;
+                insect.lastDefogLevel = insect.focusLevel;
+            }
         });
         
         // Update mini emojis if insects changed (death or new spawn)
