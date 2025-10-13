@@ -1094,10 +1094,35 @@ export class DefogGame extends Phaser.Scene {
             }
         });
         
-        // After countdown, spawn the insect
+        // After countdown, spawn ALL insects of this species simultaneously
         this.time.delayedCall(totalSeconds * 1000, () => {
-            this.spawnInsectFromPanel();
+            this.spawnAllInsectsForCurrentSpecies();
         });
+    }
+
+    spawnAllInsectsForCurrentSpecies() {
+        // Determine how many insects to spawn for current species
+        const familyIdx = this.familyProgression.currentFamilyInRound;
+        const sizeRound = this.familyProgression.currentRound;
+        const currentSpecies = this.speciesByFamily[familyIdx][sizeRound];
+        
+        let spawnsNeeded = 3; // Default
+        if (currentSpecies === 'ant') spawnsNeeded = 10;
+        else if (currentSpecies === 'stag_beetle') spawnsNeeded = 1;
+        else if (familyIdx === 2) spawnsNeeded = 1; // Lepidoptera
+        else if (sizeRound === 0) spawnsNeeded = 5;
+        else if (sizeRound === 1) spawnsNeeded = 4;
+        else if (sizeRound >= 2) spawnsNeeded = 3;
+        
+        console.log(`Spawning ALL ${spawnsNeeded} insects of ${currentSpecies} simultaneously`);
+        
+        // Spawn all insects at once
+        for (let i = 0; i < spawnsNeeded; i++) {
+            this.spawnInsectFromPanel();
+        }
+        
+        // Move to next species
+        this.progressToNextSpecies();
     }
 
     spawnInsectFromPanel() {
@@ -1263,83 +1288,52 @@ export class DefogGame extends Phaser.Scene {
     }
 
     progressToNextSpecies() {
-        this.familyProgression.spawnCountForCurrentSpecies++;
+        // Species complete - move to next one
+        this.familyProgression.currentFamilyInRound++;
+        this.familyProgression.familiesCompletedInRound++;
         
-        // Update progress display
-        const activePanel = this.familyControls.find(c => c.familyIndex === this.familyProgression.currentFamilyIndex);
-        if (activePanel && activePanel.statsText) {
-            const totalSpawns = this.familyProgression.currentFamilyIndex * 20 + this.familyProgression.currentSpeciesInFamily * 5 + this.familyProgression.spawnCountForCurrentSpecies;
-            activePanel.statsText.setText(`Progress: ${totalSpawns}/80`);
+        // Wrap family index to 0-3 range
+        if (this.familyProgression.currentFamilyInRound >= 4) {
+            this.familyProgression.currentFamilyInRound = 0;
         }
         
-        // After spawning the appropriate number, move to next species
-        // Spawn counts based on actual insect body size for balance:
-        // - Tiny insects (ant 4-11mm): 10 spawns (equivalent to 1 stag beetle)
-        // - Small insects (honeybee 11-18mm, ladybug 5-8mm): 5 spawns
-        // - Medium insects (bumblebee 11-28mm, firefly 10-20mm): 3 spawns
-        // - Large Lepidoptera (hawk moth 40-50mm, monarch 90-100mm): 1 spawn each
-        // - Very large beetles (stag beetle 30-75mm): 2 spawns
+        // After cycling through all 4 families, move to next round
+        if (this.familyProgression.familiesCompletedInRound >= 4) {
+            this.familyProgression.familiesCompletedInRound = 0;
+            this.familyProgression.currentRound++;
+            
+            console.log(`Round ${this.familyProgression.currentRound - 1} complete! Moving to Round ${this.familyProgression.currentRound} (next vision tier)`);
+            
+            // After all 4 rounds (all vision levels), loop back to start
+            if (this.familyProgression.currentRound >= 4) {
+                this.familyProgression.currentRound = 0;
+                console.log('All vision levels complete! Looping back to simplest vision.');
+            }
+        }
+        
+        // Update current species ID
         const familyIdx = this.familyProgression.currentFamilyInRound;
         const sizeRound = this.familyProgression.currentRound;
-        const currentSpecies = this.speciesByFamily[familyIdx][sizeRound];
+        this.currentSpeciesId = this.speciesByFamily[familyIdx][sizeRound];
         
-        // Define spawn counts per species for balanced gameplay
-        let spawnsNeeded = 3; // Default
-        if (currentSpecies === 'ant') spawnsNeeded = 10; // Tiny - 10 ants = 1 stag beetle
-        else if (currentSpecies === 'stag_beetle') spawnsNeeded = 1; // Very large beetle - only 1!
-        else if (familyIdx === 2) spawnsNeeded = 1; // All Lepidoptera are large (40-100mm)
-        else if (sizeRound === 0) spawnsNeeded = 5; // Small starting insects (mosquito, firefly)
-        else if (sizeRound === 1) spawnsNeeded = 4; // Medium-small insects
-        else if (sizeRound >= 2) spawnsNeeded = 3; // Medium-large insects
+        // Calculate next spawn count
+        const nextSpecies = this.currentSpeciesId;
+        let nextSpawnsNeeded = 3; // Default
+        if (nextSpecies === 'ant') nextSpawnsNeeded = 10; // Tiny
+        else if (nextSpecies === 'stag_beetle') nextSpawnsNeeded = 1; // Very large beetle - only 1!
+        else if (familyIdx === 2) nextSpawnsNeeded = 1; // All Lepidoptera
+        else if (sizeRound === 0) nextSpawnsNeeded = 5; // Small starting insects
+        else if (sizeRound === 1) nextSpawnsNeeded = 4; // Medium-small
+        else if (sizeRound >= 2) nextSpawnsNeeded = 3; // Medium-large
         
-        if (this.familyProgression.spawnCountForCurrentSpecies >= spawnsNeeded) {
-            this.familyProgression.spawnCountForCurrentSpecies = 0;
-            this.familyProgression.currentFamilyInRound++;
-            this.familyProgression.familiesCompletedInRound++;
-            
-            // Wrap family index to 0-3 range
-            if (this.familyProgression.currentFamilyInRound >= 4) {
-                this.familyProgression.currentFamilyInRound = 0;
-            }
-            
-            // After cycling through all 4 families, move to next round
-            if (this.familyProgression.familiesCompletedInRound >= 4) {
-                this.familyProgression.familiesCompletedInRound = 0;
-                this.familyProgression.currentRound++;
-                
-                console.log(`Round ${this.familyProgression.currentRound - 1} complete! Moving to Round ${this.familyProgression.currentRound} (next vision tier)`);
-                
-                // After all 4 rounds (all vision levels), loop back to start
-                if (this.familyProgression.currentRound >= 4) {
-                    this.familyProgression.currentRound = 0;
-                    console.log('All vision levels complete! Looping back to simplest vision.');
-                }
-            }
-            
-            // Update current species ID
-            const familyIdx = this.familyProgression.currentFamilyInRound;
-            const sizeRound = this.familyProgression.currentRound;
-            this.currentSpeciesId = this.speciesByFamily[familyIdx][sizeRound];
-            
-            // Calculate next spawn count
-            const nextSpecies = this.currentSpeciesId;
-            let nextSpawnsNeeded = 3; // Default
-            if (nextSpecies === 'ant') nextSpawnsNeeded = 10; // Tiny
-            else if (nextSpecies === 'stag_beetle') nextSpawnsNeeded = 1; // Very large beetle - only 1!
-            else if (familyIdx === 2) nextSpawnsNeeded = 1; // All Lepidoptera
-            else if (sizeRound === 0) nextSpawnsNeeded = 5; // Small starting insects
-            else if (sizeRound === 1) nextSpawnsNeeded = 4; // Medium-small
-            else if (sizeRound >= 2) nextSpawnsNeeded = 3; // Medium-large
-            
-            const familyName = SUPERFAMILIES[familyIdx];
-            console.log(`Next species: ${this.currentSpeciesId} (${familyName}, Round ${sizeRound}) - will spawn ${nextSpawnsNeeded}x`);
-            
-            // Update species box highlights (NEW for v0.03!)
-            this.updateSpeciesBoxHighlights();
-            
-            // Update active panel display (REMOVED - we don't use panels in v0.03)
-            // this.updateActivePanelDisplay();
-        }
+        const familyName = SUPERFAMILIES[familyIdx];
+        console.log(`Next species: ${this.currentSpeciesId} (${familyName}, Round ${sizeRound}) - will spawn ${nextSpawnsNeeded}x`);
+        
+        // Update species box highlights (NEW for v0.03!)
+        this.updateSpeciesBoxHighlights();
+        
+        // Start timer for next spawn
+        this.startSpawnTimer(12);
     }
 
     // OLD v0.02 - not needed in v0.03 since all families are visible from start
@@ -1984,6 +1978,15 @@ export class DefogGame extends Phaser.Scene {
     }
 
     update(time, delta) {
+        // Performance optimization: Skip update if delta is too large (tab was inactive)
+        if (delta > 1000) {
+            console.log('⏭️ Skipping large delta update (tab was inactive)');
+            return;
+        }
+        
+        // Performance optimization: Limit delta to prevent huge jumps
+        delta = Math.min(delta, 100);
+        
         // Track if we need to update mini emojis
         let insectsChanged = false;
         
