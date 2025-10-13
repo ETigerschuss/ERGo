@@ -98,8 +98,8 @@ export class DefogGame extends Phaser.Scene {
         // Input handling
         this.setupInputHandlers();
         
-        // Start the first spawn timer (12 seconds to reduce lag)
-        this.startSpawnTimer(12);
+        // Start the first spawn timer (15 seconds to prevent too many insects)
+        this.startSpawnTimer(15);
 
         // Instructions (split into two lines for readability)
         this.add.text(width / 2, 12, 'Click species box to program spawn point | Click insect to select, click to set path', {
@@ -1163,8 +1163,8 @@ export class DefogGame extends Phaser.Scene {
         this.familyProgression.spawnCountForCurrentSpecies = spawnsNeeded;
         this.progressToNextSpecies();
         
-        // Start next spawn timer
-        this.startSpawnTimer(12);
+        // Start next spawn timer (15 seconds to prevent too many insects)
+        this.startSpawnTimer(15);
     }
 
     spawnSingleInsect(insectData, insectId, emoji, startX, startY, programmedWaypoint = null) {
@@ -1257,7 +1257,7 @@ export class DefogGame extends Phaser.Scene {
             randomWalkMode: true,
             randomWalkTimer: 0,
             age: 0,
-            lifespan: insectId === 'ant' ? 180000 : 90000 / insectData.speed // Ants live 180s (3min), others 90s/speed (18-90s)
+            lifespan: insectId === 'ant' ? 117000 : 90000 / insectData.speed // Ants live 117s (35% shorter), others 90s/speed (18-90s)
         };
         
         this.insects.push(insect);
@@ -1615,7 +1615,7 @@ export class DefogGame extends Phaser.Scene {
                     // Calculate maximum distance based on lifespan
                     const insectData = INSECT_DATABASE[boxData.speciesId];
                     const insectSpeed = insectData.speed || 1;
-                    const lifespan = boxData.speciesId === 'ant' ? 180000 : 90000 / insectSpeed;
+                    const lifespan = boxData.speciesId === 'ant' ? 117000 : 90000 / insectSpeed; // Ants: 117s (35% shorter)
                     const maxDistance = (lifespan / 1000) * insectSpeed * 30; // pixels = (seconds) * (speed factor) * 30
                     
                     // Get spawn position (image center)
