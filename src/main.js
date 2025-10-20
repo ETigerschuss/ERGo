@@ -1,6 +1,6 @@
 import { SplashScreen } from './scenes/SplashScreen.js';
 import { Start } from './scenes/StartNew.js';
-import { DefogGame } from './scenes/DefogGamev0.04.js?v=089';
+import { DefogGame } from './scenes/DefogGamev0.04.js?v=090';
 import { InsectSelection } from './scenes/InsectSelectionEnhanced.js';
 
 const config = {

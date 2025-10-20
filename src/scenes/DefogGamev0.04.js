@@ -2981,42 +2981,16 @@ export class DefogGame extends Phaser.Scene {
                 const g = pixelData[1];
                 const b = pixelData[2];
                 
-                // v0.04: Color insects ALWAYS reveal monochrome layer and award monochrome rhodopsin
+                // v0.04: Combined edge detection (single neighbor loop for performance)
                 const isNewPixelMono = !this.revealedPixelsMono.has(pixelKey);
-                if (isNewPixelMono) {
-                    // Calculate brightness for monochrome edge detection
+                const shouldDetectColorEdges = this.greenCurrencyUnlocked && isNewPixelColor;
+                
+                if (isNewPixelMono || shouldDetectColorEdges) {
                     const brightness = (r + g + b) / 3;
                     let maxContrast = 0;
-                    for (let ny = -1; ny <= 1; ny++) {
-                        for (let nx = -1; nx <= 1; nx++) {
-                            if (nx === 0 && ny === 0) continue;
-                            const npx = px + nx;
-                            const npy = py + ny;
-                            if (npx >= 0 && npx < this.hiddenImage.width && npy >= 0 && npy < this.hiddenImage.height) {
-                                const neighborData = this.imageContext.getImageData(npx, npy, 1, 1).data;
-                                const neighborBrightness = (neighborData[0] + neighborData[1] + neighborData[2]) / 3;
-                                const contrast = Math.abs(brightness - neighborBrightness);
-                                maxContrast = Math.max(maxContrast, contrast);
-                            }
-                        }
-                    }
-                    
-                    // Award monochrome rhodopsin based on edge strength
-                    if (maxContrast > 100) {
-                        edgeCurrency += 1; // Strong edge
-                    } else if (maxContrast > 50) {
-                        edgeCurrency += 0.5; // Medium edge
-                    } else if (maxContrast > 20) {
-                        edgeCurrency += 0.1; // Weak edge
-                    }
-                    
-                    this.revealedPixelsMono.add(pixelKey); // Mark as revealed for MONOCHROME
-                }
-                
-                // v0.04: COLOR EDGE DETECTION - only if green currency is unlocked AND new color pixel
-                if (this.greenCurrencyUnlocked && isNewPixelColor) {
-                    // Detect color edges (contrast in each channel)
                     let maxContrastR = 0, maxContrastG = 0, maxContrastB = 0;
+                    
+                    // Single neighbor loop for both monochrome and color edge detection
                     for (let ny = -1; ny <= 1; ny++) {
                         for (let nx = -1; nx <= 1; nx++) {
                             if (nx === 0 && ny === 0) continue;
@@ -3024,27 +2998,52 @@ export class DefogGame extends Phaser.Scene {
                             const npy = py + ny;
                             if (npx >= 0 && npx < this.hiddenImage.width && npy >= 0 && npy < this.hiddenImage.height) {
                                 const neighborData = this.imageContext.getImageData(npx, npy, 1, 1).data;
-                                maxContrastR = Math.max(maxContrastR, Math.abs(r - neighborData[0]));
-                                maxContrastG = Math.max(maxContrastG, Math.abs(g - neighborData[1]));
-                                maxContrastB = Math.max(maxContrastB, Math.abs(b - neighborData[2]));
+                                
+                                // Monochrome edge detection
+                                if (isNewPixelMono) {
+                                    const neighborBrightness = (neighborData[0] + neighborData[1] + neighborData[2]) / 3;
+                                    const contrast = Math.abs(brightness - neighborBrightness);
+                                    maxContrast = Math.max(maxContrast, contrast);
+                                }
+                                
+                                // Color edge detection
+                                if (shouldDetectColorEdges) {
+                                    maxContrastR = Math.max(maxContrastR, Math.abs(r - neighborData[0]));
+                                    maxContrastG = Math.max(maxContrastG, Math.abs(g - neighborData[1]));
+                                    maxContrastB = Math.max(maxContrastB, Math.abs(b - neighborData[2]));
+                                }
                             }
                         }
                     }
                     
-                    // Award currency for each color channel based on edge strength
-                    if (maxContrastR > 100) edgeCurrencyRed += 1;
-                    else if (maxContrastR > 50) edgeCurrencyRed += 0.5;
-                    else if (maxContrastR > 20) edgeCurrencyRed += 0.1;
+                    // Award monochrome rhodopsin
+                    if (isNewPixelMono) {
+                        if (maxContrast > 100) {
+                            edgeCurrency += 1;
+                        } else if (maxContrast > 50) {
+                            edgeCurrency += 0.5;
+                        } else if (maxContrast > 20) {
+                            edgeCurrency += 0.1;
+                        }
+                        this.revealedPixelsMono.add(pixelKey);
+                    }
                     
-                    if (maxContrastG > 100) edgeCurrencyGreen += 1;
-                    else if (maxContrastG > 50) edgeCurrencyGreen += 0.5;
-                    else if (maxContrastG > 20) edgeCurrencyGreen += 0.1;
-                    
-                    if (maxContrastB > 100) edgeCurrencyBlue += 1;
-                    else if (maxContrastB > 50) edgeCurrencyBlue += 0.5;
-                    else if (maxContrastB > 20) edgeCurrencyBlue += 0.1;
-                    
-                    this.revealedPixelsColor.add(pixelKey); // Mark as revealed for COLOR
+                    // Award color rhodopsin
+                    if (shouldDetectColorEdges) {
+                        if (maxContrastR > 100) edgeCurrencyRed += 1;
+                        else if (maxContrastR > 50) edgeCurrencyRed += 0.5;
+                        else if (maxContrastR > 20) edgeCurrencyRed += 0.1;
+                        
+                        if (maxContrastG > 100) edgeCurrencyGreen += 1;
+                        else if (maxContrastG > 50) edgeCurrencyGreen += 0.5;
+                        else if (maxContrastG > 20) edgeCurrencyGreen += 0.1;
+                        
+                        if (maxContrastB > 100) edgeCurrencyBlue += 1;
+                        else if (maxContrastB > 50) edgeCurrencyBlue += 0.5;
+                        else if (maxContrastB > 20) edgeCurrencyBlue += 0.1;
+                        
+                        this.revealedPixelsColor.add(pixelKey);
+                    }
                 }
                 
                 // Base alpha from distance and focus
