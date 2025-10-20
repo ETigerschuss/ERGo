@@ -1724,6 +1724,7 @@ export class DefogGame extends Phaser.Scene {
             randomWalkMode: true,
             randomWalkTimer: 0,
             age: 0,
+            spawnDelay: 500, // v0.04: Wait 500ms before defogging to prevent spawn freeze
             lifespan: insectId === 'ant' ? 117000 : 90000 / insectData.speed // Ants live 117s (35% shorter), others 90s/speed (18-90s)
         };
         
@@ -3097,7 +3098,7 @@ export class DefogGame extends Phaser.Scene {
         this.colorCanvasB.draw(graphicsB, 0, 0);
         
         // v0.04: Color insects also reveal monochrome layer (always)
-        this.canvas.draw(graphicsMono, 0, 0);
+        this.bwCanvas.draw(graphicsMono, 0, 0);
         
         graphicsR.destroy();
         graphicsG.destroy();
