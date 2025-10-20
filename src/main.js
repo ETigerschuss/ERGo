@@ -1,7 +1,7 @@
-import { SplashScreen } from './scenes/SplashScreen.js';  // Initial splash screen
-import { Start } from './scenes/StartNew.js';  // Family selection UI
-import { DefogGame } from './scenes/DefogGamev0.03.js';  // v0.03: All species visible in corners
-import { InsectSelection } from './scenes/InsectSelectionEnhanced.js';  // Enhanced version with spectral sensitivity
+import { SplashScreen } from './scenes/SplashScreen.js';
+import { Start } from './scenes/StartNew.js';
+import { DefogGame } from './scenes/DefogGamev0.04.js?v=086';
+import { InsectSelection } from './scenes/InsectSelectionEnhanced.js';
 
 const config = {
     type: Phaser.AUTO,

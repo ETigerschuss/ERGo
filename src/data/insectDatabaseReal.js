@@ -368,3 +368,44 @@ export const COLOR_CHANNELS = {
     G: { name: "Green", color: 0x00ff00, fogLayer: "fogGreen" },
     R: { name: "Red", color: 0xff0000, fogLayer: "fogRed" }
 };
+
+/**
+ * Unlock costs for each species (spectral currencies required)
+ * 
+ * v0.04 Balancing:
+ * - Monochromats balanced by lifetime earning potential:
+ *   * Ant: radius 50, speed 1 → area ~7850/frame → 1 mono (cheap, many needed)
+ *   * Mosquito: radius 40, speed 3 → area ~5027/frame → 2 mono (2x ant cost for half quantity)
+ *   * Stag beetle: radius 50, speed 1 → area ~7850/frame → 10 mono (10x ant cost, single unit strategy)
+ *   Ratio: 10 ants (10 mono) = 5 mosquitoes (10 mono) = 1 stag beetle (10 mono) ✓
+ * 
+ * - Trichromats unlock after 100 monochrome → 10 green conversion
+ * - Butterflies require full color spectrum (red+blue unlocked from green/blue conversions)
+ */
+export const UNLOCK_COSTS = {
+    // HYMENOPTERA (Bees, Wasps, Ants)
+    ant: { monochrome: 1, green: 0, red: 0, blue: 0 },           // 1st - monochrome only
+    honeybee: { monochrome: 0, green: 45, red: 0, blue: 0 },     // 2nd - REDUCED green (50→45)
+    bumblebee: { monochrome: 0, green: 60, red: 6, blue: 8 },    // 3rd - MAJOR CUT (80→60)
+    hornet: { monochrome: 0, green: 110, red: 14, blue: 16 },    // 4th - REDUCED (140→110)
+    
+    // DIPTERA (Flies)
+    mosquito: { monochrome: 2, green: 0, red: 0, blue: 0 },      // 1st - monochrome only
+    vinegar_fly: { monochrome: 0, green: 35, red: 0, blue: 0 },  // 2nd - REDUCED (40→35)
+    housefly: { monochrome: 0, green: 50, red: 4, blue: 8 },     // 3rd - MAJOR CUT (65→50)
+    hoverfly: { monochrome: 0, green: 85, red: 10, blue: 12 },   // 4th - REDUCED (110→85)
+    horsefly: { monochrome: 0, green: 75, red: 10, blue: 22 },   // 5th (Tabanus) - REDUCED (95→75)
+    robber_fly: { monochrome: 0, green: 100, red: 18, blue: 20 }, // 6th - REDUCED (130→100)
+    
+    // LEPIDOPTERA (Butterflies & Moths)
+    hawk_moth: { monochrome: 0, green: 70, red: 38, blue: 35 },  // 1st - REDUCED (90→70)
+    peacock: { monochrome: 0, green: 100, red: 55, blue: 60 },   // 2nd - MAJOR CUT (140→100)
+    monarch: { monochrome: 0, green: 125, red: 80, blue: 85 },   // 3rd (Danaus) - MAJOR CUT (165→125)
+    cabbage_white: { monochrome: 0, green: 180, red: 75, blue: 130 }, // 4th (Pieris) - REDUCED (230→180)
+    
+    // COLEOPTERA (Beetles)
+    stag_beetle: { monochrome: 10, green: 0, red: 0, blue: 0 },  // 1st - monochrome only
+    firefly: { monochrome: 0, green: 45, red: 10, blue: 10 },    // 2nd - REDUCED (55→45)
+    ladybug: { monochrome: 0, green: 75, red: 32, blue: 28 },    // 3rd (Coccinella) - MAJOR CUT (100→75)
+    rose_chafer: { monochrome: 0, green: 130, red: 35, blue: 55 } // 4th (Cetonia) - REDUCED (165→130)
+};
