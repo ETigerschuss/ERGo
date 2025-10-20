@@ -61,7 +61,35 @@ export class DefogGame extends Phaser.Scene {
 
     preload() {
         console.log('Loading image...');
-        this.load.image('hiddenImage', 'assets/IMG_0061.jpg');
+        
+        // Multi-level system - different images for each level
+        const levelImages = [
+            'assets/IMG_0061.jpg',  // Level 1 (1600x506)
+            'assets/IMG_0104.jpg',  // Level 2 (1853x554) - closest aspect ratio
+            'assets/IMG_0159.jpg',  // Level 3 (1853x540)
+            'assets/IMG_0086.jpg',  // Level 4 (1853x438)
+            'assets/IMG_0096.jpg',  // Level 5 (1853x438)
+        ];
+        
+        // Get current level from game registry (defaults to 1)
+        this.currentLevel = this.registry.get('currentLevel') || 1;
+        const imageIndex = Math.min(this.currentLevel - 1, levelImages.length - 1);
+        const imagePath = levelImages[imageIndex];
+        
+        console.log(`📊 Loading Level ${this.currentLevel} image: ${imagePath}`);
+        
+        // Remove old cached image if it exists
+        if (this.textures.exists('hiddenImage')) {
+            console.log('🗑️ Removing old cached image...');
+            this.textures.remove('hiddenImage');
+        }
+        
+        this.load.image('hiddenImage', imagePath);
+        
+        // Load final reward image
+        if (!this.textures.exists('finalReward')) {
+            this.load.image('finalReward', 'assets/Drosophila melanogaster drawing.JPG');
+        }
     }
 
     create() {
@@ -130,10 +158,13 @@ export class DefogGame extends Phaser.Scene {
         this.greenCurrencyUnlocked = false; // Unlock green rhodopsin at 100 monochrome
         
         // Timer and level completion tracking
-        this.levelStartTime = Date.now();
+        this.levelStartTime = null; // Will be set when user clicks START on intro screen
         this.levelCompleted = false;
         this.timerStopped = false;
         this.finalTime = 0;
+        
+        // High score system - load from localStorage
+        this.loadHighScores();
         
         console.log('🔓 Starting unlocked insects:', this.unlockedInsects);
         console.log('💰 Starting with 10 monochrome - buy your first species!');
@@ -173,6 +204,9 @@ export class DefogGame extends Phaser.Scene {
         this.createSpectralEvolutionDisplay(width, height);
 
         console.log('=== CREATE COMPLETE ===');
+        
+        // Show introduction screen with rules (timer starts when user clicks START)
+        this.showIntroductionScreen();
     }
 
     createColorFogLayers(width, height) {
@@ -1125,6 +1159,18 @@ export class DefogGame extends Phaser.Scene {
     updateSpeciesBoxHighlights() {
         if (!this.speciesBoxes) return;
         
+        // Get all currently active species (max 3 total across all families)
+        const allActiveSpecies = this.getAllActiveSpecies();
+        const atSpeciesLimit = allActiveSpecies.length >= 3;
+        
+        // Build map of active species per family
+        const activeFamilySpecies = new Map();
+        this.insects.forEach(insect => {
+            if (!insect.isDead) {
+                activeFamilySpecies.set(insect.superfamily, insect.insectId);
+            }
+        });
+        
         this.speciesBoxes.forEach(boxData => {
             const speciesId = boxData.speciesId;
             const insectData = INSECT_DATABASE[speciesId];
@@ -1134,9 +1180,15 @@ export class DefogGame extends Phaser.Scene {
             // Unlocked species are always affordable (FREE!)
             const canAfford = isUnlocked || this.currencySystem.canAfford(costs);
             
-            // Check if family is blocked by another species
-            const isFamilyBlocked = this.activeFamilies.has(family) && this.activeFamilies.get(family) !== speciesId;
-            const isSpeciesActive = this.activeSpecies.has(speciesId);
+            // Check if this species is currently active
+            const isSpeciesActive = allActiveSpecies.includes(speciesId);
+            
+            // Check if family has a different species active
+            const familyHasOtherSpecies = activeFamilySpecies.has(family) && 
+                                          activeFamilySpecies.get(family) !== speciesId;
+            
+            // Check if blocked: at 3-species total limit OR family has different species active
+            const isBlocked = (atSpeciesLimit && !isSpeciesActive) || familyHasOtherSpecies;
             
             let boxColor = 0x0f1520; // Default: dark gray (locked, can't afford)
             let borderColor = 0x333333;
@@ -1144,8 +1196,8 @@ export class DefogGame extends Phaser.Scene {
             let emojiSize = '20px';
             
             // Priority: Check blocks first, then affordability, then unlock status
-            if (isFamilyBlocked || isSpeciesActive) {
-                // BLOCKED: Family occupied by another species OR this species is already active
+            if (isBlocked) {
+                // BLOCKED: 3 species limit OR family occupied by different species
                 // Make RED very obvious - darker red background, bright red border
                 boxColor = 0x3a0808; // Darker red tint (more visible)
                 borderColor = 0xff0000; // Bright red border
@@ -1172,9 +1224,9 @@ export class DefogGame extends Phaser.Scene {
             boxData.emojiText.setFontSize(emojiSize);
             
             // Show/hide blocked indicator (🚫) for colorblind accessibility
-            // ONLY show if NOT unlocked AND (family blocked OR species active)
+            // ONLY show if NOT unlocked AND blocked
             // Position: BOTTOM RIGHT corner (separate from unlock tick in top right)
-            if (!isUnlocked && (isFamilyBlocked || isSpeciesActive)) {
+            if (!isUnlocked && isBlocked) {
                 // Create blocked indicator if it doesn't exist
                 if (!boxData.blockedIndicator) {
                     boxData.blockedIndicator = this.add.text(
@@ -1195,7 +1247,7 @@ export class DefogGame extends Phaser.Scene {
             }
             
             // Disable interaction for blocked boxes to prevent spam clicking
-            if (isFamilyBlocked || isSpeciesActive) {
+            if (isBlocked) {
                 boxData.box.disableInteractive();
             } else {
                 // Re-enable interaction when unblocked
@@ -1541,6 +1593,33 @@ export class DefogGame extends Phaser.Scene {
             console.error(`Available species for family ${activeFamilyIndex}:`, this.speciesByFamily[activeFamilyIndex]);
             return false;
         }
+        
+        // ========== SPECIES LIMIT CHECK ==========
+        // 1. Max 3 species TOTAL across all families
+        const allActiveSpecies = this.getAllActiveSpecies();
+        
+        // 2. Only 1 species per family
+        const activeFamilySpecies = this.getActiveSpeciesForFamily(activeFamilyIndex);
+        
+        // Check if trying to spawn a new species (not already active)
+        if (!allActiveSpecies.includes(insectId)) {
+            // Check total limit (3 species max)
+            if (allActiveSpecies.length >= 3) {
+                console.warn(`❌ Cannot spawn ${insectData.name} - Maximum 3 species total already active`);
+                this.showSpeciesLimitMessage(allActiveSpecies);
+                return false;
+            }
+            
+            // Check family limit (1 species per family)
+            if (activeFamilySpecies.length >= 1) {
+                const activeInFamily = activeFamilySpecies[0];
+                const activeData = INSECT_DATABASE[activeInFamily];
+                console.warn(`❌ Cannot spawn ${insectData.name} - ${activeData.name} already active in this family`);
+                this.showFamilyLimitMessage(activeData.name);
+                return false;
+            }
+        }
+        // =====================================================================
         
         // ========== v0.04 UNLOCK CHECK ==========
         // Check if this insect is unlocked
@@ -2922,8 +3001,7 @@ export class DefogGame extends Phaser.Scene {
                 // Check if we should unlock green currency
                 if (!this.greenCurrencyUnlocked && this.currencySystem.getCurrencies().monochrome >= 100) {
                     this.greenCurrencyUnlocked = true;
-                    // Don't show unlock prompt - silently unlock
-                    // this.showGreenCurrencyUnlock();
+                    this.showGreenCurrencyUnlock();
                 }
             }
             
@@ -3140,8 +3218,7 @@ export class DefogGame extends Phaser.Scene {
         // v0.04: Check if we should unlock green currency (color insects earning monochrome)
         if (!this.greenCurrencyUnlocked && this.currencySystem.getCurrencies().monochrome >= 100) {
             this.greenCurrencyUnlocked = true;
-            // Don't show unlock prompt - silently unlock
-            // this.showGreenCurrencyUnlock();
+            this.showGreenCurrencyUnlock();
         }
         
         // v0.04: Track defogging activity
@@ -3244,7 +3321,7 @@ export class DefogGame extends Phaser.Scene {
         
         // Big message
         const message = this.add.text(width / 2, height / 2, 
-            '🟢 GREEN CURRENCY UNLOCKED!\n100 Monochrome earned!\nNow collecting Green, Red & Blue!', {
+            '🧬 NEW RHODOPSINS EVOLVED!\n100 Monochrome earned!\nYou can now get species with color sensitivity!', {
             fontSize: '28px',
             color: '#00ff00',
             backgroundColor: '#000000dd',
@@ -3316,6 +3393,88 @@ export class DefogGame extends Phaser.Scene {
             y: 100,
             alpha: { from: 1, to: 0 },
             duration: 3000,
+            ease: 'Quad.easeOut',
+            onComplete: () => message.destroy()
+        });
+    }
+    
+    getAllActiveSpecies() {
+        // Get all unique species IDs that currently have living insects on the field
+        // ACROSS ALL FAMILIES (maximum 3 total)
+        const activeSpecies = new Set();
+        
+        this.insects.forEach(insect => {
+            if (!insect.isDead) {
+                activeSpecies.add(insect.insectId);
+            }
+        });
+        
+        return Array.from(activeSpecies);
+    }
+    
+    getActiveSpeciesForFamily(familyIndex) {
+        // Get all unique species IDs that currently have living insects on the field
+        // from the specified family
+        const activeSpecies = new Set();
+        
+        this.insects.forEach(insect => {
+            if (!insect.isDead && insect.superfamily === familyIndex) {
+                activeSpecies.add(insect.insectId);
+            }
+        });
+        
+        return Array.from(activeSpecies);
+    }
+    
+    showSpeciesLimitMessage(activeSpeciesIds) {
+        const width = this.scale.width;
+        
+        // Get names of active species
+        const speciesNames = activeSpeciesIds.map(id => {
+            const data = INSECT_DATABASE[id];
+            return data ? data.name : id;
+        }).join(', ');
+        
+        const message = this.add.text(width / 2, 60, 
+            `❌ Maximum 3 species active!\nActive: ${speciesNames}\nWait for one to finish before spawning another.`, {
+            fontSize: '18px',
+            color: '#ff4444',
+            backgroundColor: '#000000dd',
+            padding: { x: 20, y: 10 },
+            align: 'center',
+            fontStyle: 'bold',
+            fontFamily: 'Arial'
+        }).setOrigin(0.5).setDepth(9000).setScrollFactor(0);
+        
+        this.tweens.add({
+            targets: message,
+            y: 100,
+            alpha: { from: 1, to: 0 },
+            duration: 3500,
+            ease: 'Quad.easeOut',
+            onComplete: () => message.destroy()
+        });
+    }
+    
+    showFamilyLimitMessage(activeSpeciesName) {
+        const width = this.scale.width;
+        
+        const message = this.add.text(width / 2, 60, 
+            `❌ Only 1 species per family!\n${activeSpeciesName} is already active.\nWait for it to finish first.`, {
+            fontSize: '18px',
+            color: '#ff4444',
+            backgroundColor: '#000000dd',
+            padding: { x: 20, y: 10 },
+            align: 'center',
+            fontStyle: 'bold',
+            fontFamily: 'Arial'
+        }).setOrigin(0.5).setDepth(9000).setScrollFactor(0);
+        
+        this.tweens.add({
+            targets: message,
+            y: 100,
+            alpha: { from: 1, to: 0 },
+            duration: 3500,
             ease: 'Quad.easeOut',
             onComplete: () => message.destroy()
         });
@@ -3450,6 +3609,12 @@ export class DefogGame extends Phaser.Scene {
     updateTimer() {
         if (this.timerStopped) return;
         
+        // Don't update timer until level has started (intro screen dismissed)
+        if (!this.levelStartTime) {
+            this.timerText.setText('00:00');
+            return;
+        }
+        
         const elapsedMs = Date.now() - this.levelStartTime;
         const seconds = Math.floor(elapsedMs / 1000);
         const minutes = Math.floor(seconds / 60);
@@ -3470,23 +3635,32 @@ export class DefogGame extends Phaser.Scene {
         const totalLevel1Species = level1Species.length; // Should be 16
         const unlockedInLevel1 = this.unlockedInsects.filter(id => level1Species.includes(id)).length;
         
-        console.log(`📊 Level 1 Progress: ${unlockedInLevel1}/${totalLevel1Species} species unlocked`);
+        console.log(`📊 Level ${this.currentLevel} Progress: ${unlockedInLevel1}/${totalLevel1Species} species unlocked`);
         
-        // Check if all level 1 species are unlocked
+        // Check if all level species are unlocked
         if (unlockedInLevel1 >= totalLevel1Species && !this.levelCompleted) {
-            console.log('🎉 LEVEL 1 COMPLETE! All 16 species unlocked!');
+            console.log(`🎉 LEVEL ${this.currentLevel} COMPLETE! All 16 species unlocked!`);
             this.levelCompleted = true;
             
             // Stop timer
             this.timerStopped = true;
             this.finalTime = Date.now() - this.levelStartTime;
             
+            // Capture rhodopsin values for diamond score
+            this.finalRhodopsins = this.currencySystem.getCurrencies();
+            this.finalDiamondScore = this.calculateDiamondScore(this.finalRhodopsins, this.finalTime);
+            
+            // Update high score for this level
+            this.updateHighScore(
+                this.currentLevel, 
+                this.finalTime, 
+                this.finalDiamondScore,
+                this.finalRhodopsins
+            );
+            
             // Show finish level button
             this.finishLevelButton.setVisible(true);
             this.finishLevelButtonText.setVisible(true);
-            
-            // Show brief completion message
-            this.showLevelCompleteMessage();
         }
     }
     
@@ -3494,65 +3668,244 @@ export class DefogGame extends Phaser.Scene {
         const width = this.scale.width;
         const height = this.scale.height;
         
+        // Update high score for this level
+        const isNewBest = this.updateHighScore(
+            this.currentLevel, 
+            this.finalTime, 
+            this.finalDiamondScore,
+            this.finalRhodopsins
+        );
+        const currentBest = this.highScores.levels[this.currentLevel];
+        
+        const nextLevel = this.currentLevel + 1;
+        const maxLevel = 5; // We have 5 levels now
+        const hasNextLevel = nextLevel <= maxLevel;
+        
+        // Check if all levels are now completed
+        const allLevelsCompleted = this.checkAllLevelsCompleted();
+        
         // Create overlay
-        const overlay = this.add.rectangle(0, 0, width * 2, height * 2, 0x000000, 0.8)
+        const overlay = this.add.rectangle(0, 0, width * 2, height * 2, 0x000000, 0.85)
             .setOrigin(0).setDepth(10000).setScrollFactor(0);
         
-        // Create completion message
-        const message = this.add.text(width / 2, height / 2 - 50, 
-            '🎉 LEVEL 1 COMPLETE! 🎉\n\nAll 16 Species Unlocked!', {
-            fontSize: '48px',
-            color: '#00ff00',
+        // Title with NEW BEST indicator
+        const titleText = isNewBest 
+            ? `🏆 LEVEL ${this.currentLevel} - NEW BEST TIME! 🏆`
+            : `✅ LEVEL ${this.currentLevel} COMPLETE!`;
+        
+        const message = this.add.text(width / 2, height / 2 - 140, 
+            titleText, {
+            fontSize: '42px',
+            color: isNewBest ? '#FFD700' : '#00ff00',
             backgroundColor: '#000000dd',
-            padding: { x: 40, y: 30 },
+            padding: { x: 30, y: 20 },
             align: 'center',
             fontStyle: 'bold',
             fontFamily: 'Arial'
         }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
         
-        // Add subtitle
-        const subtitle = this.add.text(width / 2, height / 2 + 80, 
-            'Continue playing...', {
+        // Current time
+        const timeText = this.add.text(width / 2, height / 2 - 70,
+            `Your Time: ${this.formatTime(this.finalTime)}`, {
+            fontSize: '32px',
+            color: '#ffffff',
+            fontFamily: 'Arial',
+            fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
+        
+        // Best time info
+        let bestInfoText = '';
+        if (isNewBest) {
+            bestInfoText = '✨ New personal record! ✨';
+        } else {
+            bestInfoText = `Best Time: ${this.formatTime(currentBest.time)}`;
+        }
+        
+        const bestText = this.add.text(width / 2, height / 2 - 30,
+            bestInfoText, {
             fontSize: '24px',
-            color: '#ffaa00',
-            align: 'center',
-            fontStyle: 'italic',
+            color: isNewBest ? '#FFD700' : '#aaaaaa',
+            fontFamily: 'Arial',
+            fontStyle: 'italic'
+        }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
+        
+        // Date achieved
+        const dateText = this.add.text(width / 2, height / 2 + 5,
+            `Achieved: ${currentBest.dateFormatted}`, {
+            fontSize: '16px',
+            color: '#888888',
             fontFamily: 'Arial'
         }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
         
-        // Pulse animation
-        const pulseTween = this.tweens.add({
+        // Progress indicator
+        const completedLevels = Object.values(this.highScores.levels).filter(l => l !== null).length;
+        const progressText = this.add.text(width / 2, height / 2 + 40,
+            `Levels Completed: ${completedLevels}/5`, {
+            fontSize: '22px',
+            color: '#ffaa00',
+            fontFamily: 'Arial'
+        }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
+        
+        // Diamond-style high score display
+        const diamondBg = this.add.graphics();
+        diamondBg.fillStyle(0x1a1a1a, 0.9);
+        diamondBg.lineStyle(3, 0xFFD700);
+        
+        // Diamond shape (rotated square)
+        const diamondSize = 200;
+        const diamondX = width / 2;
+        const diamondY = height / 2 + 160;
+        
+        diamondBg.beginPath();
+        diamondBg.moveTo(diamondX, diamondY - diamondSize / 2); // Top
+        diamondBg.lineTo(diamondX + diamondSize / 2, diamondY); // Right
+        diamondBg.lineTo(diamondX, diamondY + diamondSize / 2); // Bottom
+        diamondBg.lineTo(diamondX - diamondSize / 2, diamondY); // Left
+        diamondBg.closePath();
+        diamondBg.fillPath();
+        diamondBg.strokePath();
+        diamondBg.setDepth(10001).setScrollFactor(0);
+        
+        // Diamond content - show this level's best with diamond score
+        const diamondTitle = this.add.text(diamondX, diamondY - 65,
+            `💎 LEVEL ${this.currentLevel} 💎`, {
+            fontSize: '20px',
+            color: '#FFD700',
+            fontFamily: 'Arial',
+            fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(10002).setScrollFactor(0);
+        
+        const diamondScore = this.add.text(diamondX, diamondY - 35,
+            `${currentBest.diamonds || this.finalDiamondScore}💎`, {
+            fontSize: '28px',
+            color: '#FFD700',
+            fontFamily: 'Arial',
+            fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(10002).setScrollFactor(0);
+        
+        const diamondBestTime = this.add.text(diamondX, diamondY,
+            `Time: ${this.formatTime(currentBest.time)}`, {
+            fontSize: '18px',
+            color: '#ffffff',
+            fontFamily: 'Arial',
+            fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(10002).setScrollFactor(0);
+        
+        const diamondDate = this.add.text(diamondX, diamondY + 25,
+            currentBest.dateFormatted, {
+            fontSize: '12px',
+            color: '#aaaaaa',
+            fontFamily: 'Arial'
+        }).setOrigin(0.5).setDepth(10002).setScrollFactor(0);
+        
+        // Show rhodopsin breakdown
+        const rho = currentBest.rhodopsins || this.finalRhodopsins;
+        const diamondRhodopsin = this.add.text(diamondX, diamondY + 50,
+            `⚫${rho.monochrome} 🔴${rho.red} 🟢${rho.green} 🔵${rho.blue}`, {
+            fontSize: '14px',
+            color: '#ffffff',
+            fontFamily: 'Arial'
+        }).setOrigin(0.5).setDepth(10002).setScrollFactor(0);
+        
+        const diamondComplete = this.add.text(diamondX, diamondY + 75,
+            `✓ ${completedLevels}/5 Complete`, {
+            fontSize: '16px',
+            color: '#00ff00',
+            fontFamily: 'Arial'
+        }).setOrigin(0.5).setDepth(10002).setScrollFactor(0);
+        
+        let buttonsY = height / 2 + 285;
+        
+        // Next Level button or Final Reward button
+        if (allLevelsCompleted && !hasNextLevel) {
+            // Show "View Final Reward" button
+            const rewardButton = this.add.text(width / 2, buttonsY,
+                '🎁 View Final Reward 🎁', {
+                fontSize: '32px',
+                color: '#ffffff',
+                backgroundColor: '#FFD700',
+                padding: { x: 30, y: 15 },
+                align: 'center',
+                fontStyle: 'bold',
+                fontFamily: 'Arial'
+            }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
+            
+            rewardButton.setInteractive({ useHandCursor: true });
+            rewardButton.on('pointerover', () => {
+                rewardButton.setStyle({ backgroundColor: '#FFE44D' });
+                rewardButton.setScale(1.05);
+            });
+            rewardButton.on('pointerout', () => {
+                rewardButton.setStyle({ backgroundColor: '#FFD700' });
+                rewardButton.setScale(1);
+            });
+            rewardButton.on('pointerdown', () => {
+                // Hide this dialog
+                overlay.destroy();
+                message.destroy();
+                timeText.destroy();
+                bestText.destroy();
+                dateText.destroy();
+                progressText.destroy();
+                diamondBg.destroy();
+                diamondTitle.destroy();
+                diamondScore.destroy();
+                diamondBestTime.destroy();
+                diamondDate.destroy();
+                diamondRhodopsin.destroy();
+                diamondComplete.destroy();
+                rewardButton.destroy();
+                diamondComplete.destroy();
+                rewardButton.destroy();
+                
+                // Show final reward screen
+                this.showFinalRewardScreen();
+            });
+            
+            // Pulse animation
+            this.tweens.add({
+                targets: rewardButton,
+                scale: { from: 1, to: 1.1 },
+                duration: 800,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+            
+        } else if (hasNextLevel) {
+            // Next Level button
+            const nextLevelButton = this.add.text(width / 2, buttonsY,
+                `▶ Next Level (${nextLevel})`, {
+                fontSize: '32px',
+                color: '#ffffff',
+                backgroundColor: '#00aa00',
+                padding: { x: 30, y: 15 },
+                align: 'center',
+                fontStyle: 'bold',
+                fontFamily: 'Arial'
+            }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
+            
+            nextLevelButton.setInteractive({ useHandCursor: true });
+            nextLevelButton.on('pointerover', () => {
+                nextLevelButton.setStyle({ backgroundColor: '#00ff00' });
+            });
+            nextLevelButton.on('pointerout', () => {
+                nextLevelButton.setStyle({ backgroundColor: '#00aa00' });
+            });
+            nextLevelButton.on('pointerdown', () => {
+                // Save next level and restart scene
+                this.registry.set('currentLevel', nextLevel);
+                this.scene.restart();
+            });
+        }
+        
+        // Pulse animation for title
+        this.tweens.add({
             targets: message,
-            scale: { from: 0.8, to: 1.1 },
+            scale: { from: 0.95, to: 1.05 },
             duration: 1000,
             yoyo: true,
-            repeat: 2, // Pulse 3 times
-            ease: 'Sine.easeInOut'
-        });
-        
-        // Fade out and destroy after 4 seconds
-        this.time.delayedCall(4000, () => {
-            this.tweens.add({
-                targets: [overlay, message, subtitle],
-                alpha: 0,
-                duration: 1000,
-                ease: 'Power2',
-                onComplete: () => {
-                    overlay.destroy();
-                    message.destroy();
-                    subtitle.destroy();
-                    pulseTween.remove();
-                }
-            });
-        });
-        
-        // Flash effect
-        this.tweens.add({
-            targets: overlay,
-            alpha: { from: 0.8, to: 0.4 },
-            duration: 2000,
-            yoyo: true,
-            repeat: -1,
+            repeat: 2,
             ease: 'Sine.easeInOut'
         });
     }
@@ -3561,83 +3914,55 @@ export class DefogGame extends Phaser.Scene {
         const width = this.scale.width;
         const height = this.scale.height;
         
-        // Calculate diamonds from time and spectrals
+        // Calculate diamonds from rhodopsins (already calculated and stored)
         const timeSeconds = Math.floor(this.finalTime / 1000);
-        const currencies = this.currencySystem.getCurrencies();
+        const currencies = this.finalRhodopsins;
+        const totalDiamonds = this.finalDiamondScore;
         
-        // Time-based diamond calculation (gradual scaling, ~50% of total)
-        let diamondsFromTime;
-        if (timeSeconds < 180) { // < 3 minutes
-            diamondsFromTime = 5000;
-        } else if (timeSeconds < 240) { // < 4 minutes
-            diamondsFromTime = 4000;
-        } else if (timeSeconds < 300) { // < 5 minutes
-            diamondsFromTime = 3000;
-        } else if (timeSeconds < 360) { // < 6 minutes
-            diamondsFromTime = 2500;
-        } else if (timeSeconds < 420) { // < 7 minutes
-            diamondsFromTime = 2000;
-        } else if (timeSeconds < 480) { // < 8 minutes
-            diamondsFromTime = 1500;
-        } else if (timeSeconds < 540) { // < 9 minutes
-            diamondsFromTime = 1000;
-        } else if (timeSeconds < 600) { // < 10 minutes
-            diamondsFromTime = 800;
-        } else {
-            // Gradual decrease after 10 minutes
-            diamondsFromTime = Math.max(100, Math.floor(4800 / timeSeconds));
-        }
-        
-        // Spectral conversion rates (adjusted to make time ~50%)
+        // Calculate individual diamond components for animation
         const diamondsFromMono = Math.floor(currencies.monochrome * 0.5);
         const diamondsFromRed = Math.floor(currencies.red * 10);
         const diamondsFromGreen = Math.floor(currencies.green * 2);
         const diamondsFromBlue = Math.floor(currencies.blue * 5);
         
-        const totalDiamonds = diamondsFromTime + diamondsFromMono + diamondsFromRed + diamondsFromGreen + diamondsFromBlue;
+        // Calculate time bonus
+        let timeBonus;
+        if (timeSeconds < 180) timeBonus = 5000;
+        else if (timeSeconds < 240) timeBonus = 4000;
+        else if (timeSeconds < 300) timeBonus = 3000;
+        else if (timeSeconds < 360) timeBonus = 2500;
+        else if (timeSeconds < 420) timeBonus = 2000;
+        else if (timeSeconds < 480) timeBonus = 1500;
+        else if (timeSeconds < 540) timeBonus = 1000;
+        else if (timeSeconds < 600) timeBonus = 800;
+        else timeBonus = Math.max(100, Math.floor(4800 / timeSeconds));
         
-        console.log(`💎 Diamond Rewards: Time=${diamondsFromTime}, Mono=${diamondsFromMono}, Red=${diamondsFromRed}, Green=${diamondsFromGreen}, Blue=${diamondsFromBlue}, Total=${totalDiamonds}`);
+        console.log(`💎 Diamond Rewards: Mono=${diamondsFromMono}, Red=${diamondsFromRed}, Green=${diamondsFromGreen}, Blue=${diamondsFromBlue}, Time Bonus=${timeBonus}, Total=${totalDiamonds}`);
         
-        // SAVE SCORES TO LOCALSTORAGE
-        this.saveScore(timeSeconds, totalDiamonds);
-        const bestTime = this.getBestTime();
-        const bestDiamonds = this.getBestDiamonds();
+        // Check if there's a next level or if this is the final level
+        const nextLevel = this.currentLevel + 1;
+        const maxLevel = 5;
+        const hasNextLevel = nextLevel <= maxLevel;
+        const allLevelsCompleted = this.checkAllLevelsCompleted();
         
         // Create overlay
         const overlay = this.add.rectangle(0, 0, width * 2, height * 2, 0x000000, 0.9)
             .setOrigin(0).setDepth(10000).setScrollFactor(0);
         
-        // Time display (ABOVE title)
+        // Time display
         const minutes = Math.floor(timeSeconds / 60);
         const secs = timeSeconds % 60;
         const timeStr = `${minutes}:${secs.toString().padStart(2, '0')}`;
         
-        // Best time display
-        const bestMinutes = Math.floor(bestTime / 60);
-        const bestSecs = bestTime % 60;
-        const bestTimeStr = `${bestMinutes}:${bestSecs.toString().padStart(2, '0')}`;
-        
-        const isNewBestTime = timeSeconds <= bestTime;
-        const isNewBestDiamonds = totalDiamonds >= bestDiamonds;
-        
-        const timeDisplay = this.add.text(width / 2, 80, `⏱️ Your Time: ${timeStr}${isNewBestTime ? ' 🏆 NEW BEST!' : ''}`, {
+        const timeDisplay = this.add.text(width / 2, 80, `⏱️ Time: ${timeStr}`, {
             fontSize: '32px',
-            color: isNewBestTime ? '#ffaa00' : '#ffffff',
+            color: '#ffffff',
             fontStyle: 'bold',
             fontFamily: 'Arial'
         }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
         
-        // Best time record
-        if (!isNewBestTime) {
-            this.add.text(width / 2, 115, `Best: ${bestTimeStr}`, {
-                fontSize: '18px',
-                color: '#888888',
-                fontFamily: 'Arial'
-            }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
-        }
-        
         // Title
-        const title = this.add.text(width / 2, isNewBestTime ? 140 : 155, '💎 Level Complete! 💎', {
+        const title = this.add.text(width / 2, 140, `💎 Level ${this.currentLevel} Complete! 💎`, {
             fontSize: '48px',
             color: '#ffaa00',
             fontStyle: 'bold',
@@ -3645,83 +3970,114 @@ export class DefogGame extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
         
         // Conversion displays (will be animated)
-        const timeConversionText = this.add.text(width / 2, 220, `⏱️ ${timeSeconds}s → 0 💎`, {
+        const timeConversionText = this.add.text(width / 2, 200, `⏱️ ${timeSeconds}s → 0 💎`, {
             fontSize: '24px',
-            color: '#ffffff',
-            fontFamily: 'Arial'
+            color: '#ffaa00',
+            fontFamily: 'Arial',
+            fontStyle: 'bold'
         }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
         
-        const monoConversionText = this.add.text(width / 2, 260, `⚫ ${currencies.monochrome} → 0 💎`, {
+        const monoConversionText = this.add.text(width / 2, 240, `⚫ ${currencies.monochrome} → 0 💎`, {
             fontSize: '20px',
             color: '#ffffff',
             fontFamily: 'Arial'
         }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
         
-        const redConversionText = this.add.text(width / 2, 290, `🔴 ${currencies.red} → 0 💎`, {
+        const redConversionText = this.add.text(width / 2, 270, `🔴 ${currencies.red} → 0 💎`, {
             fontSize: '20px',
             color: '#ffffff',
             fontFamily: 'Arial'
         }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
         
-        const greenConversionText = this.add.text(width / 2, 320, ` ${currencies.green} → 0 💎`, {
+        const greenConversionText = this.add.text(width / 2, 300, `🟢 ${currencies.green} → 0 💎`, {
             fontSize: '20px',
             color: '#ffffff',
             fontFamily: 'Arial'
         }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
         
-        const blueConversionText = this.add.text(width / 2, 350, `🔵 ${currencies.blue} → 0 💎`, {
+        const blueConversionText = this.add.text(width / 2, 330, `🔵 ${currencies.blue} → 0 💎`, {
             fontSize: '20px',
             color: '#ffffff',
             fontFamily: 'Arial'
         }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
         
         // Total diamonds display
-        const totalText = this.add.text(width / 2, 420, `Total: 0 💎`, {
+        const totalText = this.add.text(width / 2, 380, `Total: 0 💎`, {
             fontSize: '40px',
             color: '#ffaa00',
             fontStyle: 'bold',
             fontFamily: 'Arial'
         }).setOrigin(0.5).setDepth(10001).setScrollFactor(0).setAlpha(0);
         
-        // Next Level button (hidden initially)
-        const nextLevelButton = this.add.rectangle(width / 2, 490, 200, 50, 0x00aa00, 1)
-            .setOrigin(0.5)
-            .setDepth(10001)
-            .setScrollFactor(0)
-            .setAlpha(0);
+        // Next Level OR Final Reward button (hidden initially)
+        const nextButtonY = 460;
+        let nextButton, nextButtonText;
         
-        const nextLevelText = this.add.text(width / 2, 490, 'Next Level', {
-            fontSize: '24px',
-            color: '#ffffff',
-            fontStyle: 'bold',
-            fontFamily: 'Arial'
-        }).setOrigin(0.5).setDepth(10002).setScrollFactor(0).setAlpha(0);
+        if (allLevelsCompleted && !hasNextLevel) {
+            // Show "View Final Reward" button
+            nextButton = this.add.rectangle(width / 2 - 120, nextButtonY, 220, 50, 0xFFD700, 1)
+                .setOrigin(0.5)
+                .setDepth(10001)
+                .setScrollFactor(0)
+                .setAlpha(0);
+            
+            nextButtonText = this.add.text(width / 2 - 120, nextButtonY, '🎁 Final Reward', {
+                fontSize: '24px',
+                color: '#000000',
+                fontStyle: 'bold',
+                fontFamily: 'Arial'
+            }).setOrigin(0.5).setDepth(10002).setScrollFactor(0).setAlpha(0);
+        } else if (hasNextLevel) {
+            // Show "Next Level" button
+            nextButton = this.add.rectangle(width / 2 - 120, nextButtonY, 200, 50, 0x00aa00, 1)
+                .setOrigin(0.5)
+                .setDepth(10001)
+                .setScrollFactor(0)
+                .setAlpha(0);
+            
+            nextButtonText = this.add.text(width / 2 - 120, nextButtonY, `▶ Level ${nextLevel}`, {
+                fontSize: '24px',
+                color: '#ffffff',
+                fontStyle: 'bold',
+                fontFamily: 'Arial'
+            }).setOrigin(0.5).setDepth(10002).setScrollFactor(0).setAlpha(0);
+        }
         
         // Highscores button (right side)
-        const highscoresButton = this.add.rectangle(width / 2 + 160, 490, 140, 50, 0x4444aa, 1)
+        const highscoresButton = this.add.rectangle(width / 2 + 120, nextButtonY, 180, 50, 0x4444aa, 1)
             .setOrigin(0.5)
             .setDepth(10001)
             .setScrollFactor(0)
             .setAlpha(0);
         
-        const highscoresText = this.add.text(width / 2 + 160, 490, 'Highscores', {
+        const highscoresText = this.add.text(width / 2 + 120, nextButtonY, '📊 Highscores', {
             fontSize: '20px',
             color: '#ffffff',
             fontStyle: 'bold',
             fontFamily: 'Arial'
         }).setOrigin(0.5).setDepth(10002).setScrollFactor(0).setAlpha(0);
         
-        nextLevelButton.on('pointerover', () => {
-            nextLevelButton.setFillStyle(0x00cc00);
-        });
-        
-        nextLevelButton.on('pointerout', () => {
-            nextLevelButton.setFillStyle(0x00aa00);
-        });
-        
-        nextLevelButton.on('pointerdown', () => {
-            this.scene.start('Start');
-        });
+        // Button handlers
+        if (nextButton) {
+            nextButton.on('pointerover', () => {
+                nextButton.setFillStyle(allLevelsCompleted && !hasNextLevel ? 0xFFE44D : 0x00cc00);
+            });
+            
+            nextButton.on('pointerout', () => {
+                nextButton.setFillStyle(allLevelsCompleted && !hasNextLevel ? 0xFFD700 : 0x00aa00);
+            });
+            
+            nextButton.on('pointerdown', () => {
+                if (allLevelsCompleted && !hasNextLevel) {
+                    // Go to final reward screen
+                    this.showFinalRewardScreen();
+                } else {
+                    // Go to next level
+                    this.registry.set('currentLevel', nextLevel);
+                    this.scene.restart();
+                }
+            });
+        }
         
         highscoresButton.on('pointerover', () => {
             highscoresButton.setFillStyle(0x5555cc);
@@ -3738,24 +4094,24 @@ export class DefogGame extends Phaser.Scene {
         // ANIMATION SEQUENCE
         let currentTotalDiamonds = 0;
         
-        // Step 1: Animate time conversion (1.5 seconds)
+        // Step 1: Animate time bonus (1.2 seconds)
         this.time.delayedCall(500, () => {
             this.animateConversion(
                 timeConversionText,
                 timeSeconds,
                 0,
-                diamondsFromTime,
+                timeBonus,
                 '⏱️',
                 's',
-                1500,
+                1200,
                 (diamonds) => {
                     currentTotalDiamonds = diamonds;
                 }
             );
         });
         
-        // Step 2: Animate monochrome conversion (1 second)
-        this.time.delayedCall(2200, () => {
+        // Step 2: Animate monochrome conversion (1.2 seconds)
+        this.time.delayedCall(1900, () => {
             this.animateConversion(
                 monoConversionText,
                 currencies.monochrome,
@@ -3763,15 +4119,15 @@ export class DefogGame extends Phaser.Scene {
                 diamondsFromMono,
                 '⚫',
                 '',
-                1000,
+                1200,
                 (diamonds) => {
                     currentTotalDiamonds += diamonds;
                 }
             );
         });
         
-        // Step 3: Animate red conversion (1 second)
-        this.time.delayedCall(3400, () => {
+        // Step 3: Animate red conversion (1.2 seconds)
+        this.time.delayedCall(3300, () => {
             this.animateConversion(
                 redConversionText,
                 currencies.red,
@@ -3779,15 +4135,15 @@ export class DefogGame extends Phaser.Scene {
                 diamondsFromRed,
                 '🔴',
                 '',
-                1000,
+                1200,
                 (diamonds) => {
                     currentTotalDiamonds += diamonds;
                 }
             );
         });
         
-        // Step 4: Animate green conversion (1 second)
-        this.time.delayedCall(4600, () => {
+        // Step 4: Animate green conversion (1.2 seconds)
+        this.time.delayedCall(4700, () => {
             this.animateConversion(
                 greenConversionText,
                 currencies.green,
@@ -3795,15 +4151,15 @@ export class DefogGame extends Phaser.Scene {
                 diamondsFromGreen,
                 '🟢',
                 '',
-                1000,
+                1200,
                 (diamonds) => {
                     currentTotalDiamonds += diamonds;
                 }
             );
         });
         
-        // Step 5: Animate blue conversion (1 second)
-        this.time.delayedCall(5800, () => {
+        // Step 5: Animate blue conversion (1.2 seconds)
+        this.time.delayedCall(6100, () => {
             this.animateConversion(
                 blueConversionText,
                 currencies.blue,
@@ -3811,7 +4167,7 @@ export class DefogGame extends Phaser.Scene {
                 diamondsFromBlue,
                 '🔵',
                 '',
-                1000,
+                1200,
                 (diamonds) => {
                     currentTotalDiamonds += diamonds;
                 }
@@ -3819,41 +4175,222 @@ export class DefogGame extends Phaser.Scene {
         });
         
         // Step 6: Show total and animate sum (1.5 seconds)
-        this.time.delayedCall(7000, () => {
+        this.time.delayedCall(7500, () => {
             totalText.setAlpha(1);
-            this.animateTotalSum(totalText, totalDiamonds, 1500, isNewBestDiamonds);
+            this.animateTotalSum(totalText, totalDiamonds, 1500, false);
             
-            // Add "New Best Diamonds!" indicator if applicable
-            if (isNewBestDiamonds) {
-                const bestDiamondsText = this.add.text(width / 2, 465, '🏆 NEW BEST DIAMONDS!', {
-                    fontSize: '20px',
-                    color: '#ffaa00',
-                    fontStyle: 'bold',
-                    fontFamily: 'Arial'
-                }).setOrigin(0.5).setDepth(10001).setScrollFactor(0).setAlpha(0);
-                
-                this.tweens.add({
-                    targets: bestDiamondsText,
-                    alpha: 1,
-                    duration: 500,
-                    ease: 'Power2'
-                });
-            }
-            
-            // Show Next Level button after total animation
+            // Show buttons after total animation
             this.time.delayedCall(1700, () => {
-                nextLevelButton.setAlpha(1).setInteractive({ useHandCursor: true });
-                nextLevelText.setAlpha(1);
+                if (nextButton) {
+                    nextButton.setAlpha(1).setInteractive({ useHandCursor: true });
+                    nextButtonText.setAlpha(1);
+                }
                 highscoresButton.setAlpha(1).setInteractive({ useHandCursor: true });
                 highscoresText.setAlpha(1);
                 
+                const buttonTargets = nextButton ? 
+                    [nextButton, nextButtonText, highscoresButton, highscoresText] :
+                    [highscoresButton, highscoresText];
+                
                 this.tweens.add({
-                    targets: [nextLevelButton, nextLevelText, highscoresButton, highscoresText],
+                    targets: buttonTargets,
                     scale: { from: 0.8, to: 1 },
                     duration: 300,
                     ease: 'Back.easeOut'
                 });
             });
+        });
+    }
+
+    showIntroductionScreen() {
+        const width = this.cameras.main.width;
+        const height = this.cameras.main.height;
+
+        // Create semi-transparent overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
+        overlay.setDepth(10000);
+
+        // Title
+        const title = this.add.text(width / 2, 50, `📋 Level ${this.currentLevel} - How to Play`, {
+            fontSize: '40px',
+            fontFamily: 'Arial',
+            color: '#ffdd00',
+            fontStyle: 'bold'
+        });
+        title.setOrigin(0.5);
+        title.setDepth(10001);
+
+        // Explanation header
+        const explainHeader = this.add.text(width / 2, 110, '🧬 About Rhodopsins & Color Sensitivities:', {
+            fontSize: '22px',
+            fontFamily: 'Arial',
+            color: '#00ffff',
+            fontStyle: 'bold'
+        });
+        explainHeader.setOrigin(0.5);
+        explainHeader.setDepth(10001);
+
+        const explainText = this.add.text(width / 2, 145, 'Insects reveal the picture and earn rhodopsins (⚫🔴🟢🔵)\nbased on their color sensitivity. Use rhodopsins to unlock new species!', {
+            fontSize: '16px',
+            fontFamily: 'Arial',
+            color: '#aaaaaa',
+            align: 'center',
+            lineSpacing: 4
+        });
+        explainText.setOrigin(0.5);
+        explainText.setDepth(10001);
+
+        // Rule 1
+        const rule1 = this.add.text(width / 2, 200, '⏱️ Unlock all 16 species as quick as possible', {
+            fontSize: '22px',
+            fontFamily: 'Arial',
+            color: '#ffffff',
+            fontStyle: 'bold'
+        });
+        rule1.setOrigin(0.5);
+        rule1.setDepth(10001);
+
+        const rule1sub = this.add.text(width / 2, 225, 'to earn time bonus diamonds!', {
+            fontSize: '16px',
+            fontFamily: 'Arial',
+            color: '#aaaaaa'
+        });
+        rule1sub.setOrigin(0.5);
+        rule1sub.setDepth(10001);
+
+        // Rule 2
+        const rule2 = this.add.text(width / 2, 265, '🖼️ Unravel as much of the picture as possible', {
+            fontSize: '22px',
+            fontFamily: 'Arial',
+            color: '#ffffff',
+            fontStyle: 'bold'
+        });
+        rule2.setOrigin(0.5);
+        rule2.setDepth(10001);
+
+        const rule2sub = this.add.text(width / 2, 290, 'to convert rhodopsins into diamonds!', {
+            fontSize: '16px',
+            fontFamily: 'Arial',
+            color: '#aaaaaa'
+        });
+        rule2sub.setOrigin(0.5);
+        rule2sub.setDepth(10001);
+
+        // Rule 3
+        const rule3 = this.add.text(width / 2, 330, '🚫 Only 1 species per family allowed', {
+            fontSize: '22px',
+            fontFamily: 'Arial',
+            color: '#ffffff',
+            fontStyle: 'bold'
+        });
+        rule3.setOrigin(0.5);
+        rule3.setDepth(10001);
+
+        const rule3sub = this.add.text(width / 2, 355, 'Wait till species disappears before spawning another from same family', {
+            fontSize: '16px',
+            fontFamily: 'Arial',
+            color: '#aaaaaa'
+        });
+        rule3sub.setOrigin(0.5);
+        rule3sub.setDepth(10001);
+
+        // Rule 4
+        const rule4 = this.add.text(width / 2, 395, '⚠️ Maximum 3 species active at the same time', {
+            fontSize: '22px',
+            fontFamily: 'Arial',
+            color: '#ffffff',
+            fontStyle: 'bold'
+        });
+        rule4.setOrigin(0.5);
+        rule4.setDepth(10001);
+
+        const rule4sub = this.add.text(width / 2, 420, 'Choose your strategy wisely!', {
+            fontSize: '16px',
+            fontFamily: 'Arial',
+            color: '#aaaaaa'
+        });
+        rule4sub.setOrigin(0.5);
+        rule4sub.setDepth(10001);
+
+        // Start button
+        const buttonY = 480;
+        const startButton = this.add.rectangle(width / 2, buttonY, 300, 60, 0x00aa00);
+        startButton.setDepth(10001);
+        startButton.setInteractive({ useHandCursor: true });
+
+        const startButtonText = this.add.text(width / 2, buttonY, '▶ START LEVEL', {
+            fontSize: '28px',
+            fontFamily: 'Arial',
+            color: '#ffffff',
+            fontStyle: 'bold'
+        });
+        startButtonText.setOrigin(0.5);
+        startButtonText.setDepth(10002);
+
+        // Button hover effects
+        startButton.on('pointerover', () => {
+            startButton.setFillStyle(0x00cc00);
+            this.tweens.add({
+                targets: startButton,
+                scaleX: 1.05,
+                scaleY: 1.05,
+                duration: 100
+            });
+        });
+
+        startButton.on('pointerout', () => {
+            startButton.setFillStyle(0x00aa00);
+            this.tweens.add({
+                targets: startButton,
+                scaleX: 1,
+                scaleY: 1,
+                duration: 100
+            });
+        });
+
+        // Start button click - start the timer and remove intro
+        startButton.on('pointerdown', () => {
+            // Start the timer NOW
+            this.levelStartTime = Date.now();
+            
+            // Remove all intro elements
+            overlay.destroy();
+            title.destroy();
+            explainHeader.destroy();
+            explainText.destroy();
+            rule1.destroy();
+            rule1sub.destroy();
+            rule2.destroy();
+            rule2sub.destroy();
+            rule3.destroy();
+            rule3sub.destroy();
+            rule4.destroy();
+            rule4sub.destroy();
+            startButton.destroy();
+            startButtonText.destroy();
+        });
+
+        // Fade in animation
+        overlay.setAlpha(0);
+        title.setAlpha(0);
+        explainHeader.setAlpha(0);
+        explainText.setAlpha(0);
+        rule1.setAlpha(0);
+        rule1sub.setAlpha(0);
+        rule2.setAlpha(0);
+        rule2sub.setAlpha(0);
+        rule3.setAlpha(0);
+        rule3sub.setAlpha(0);
+        rule4.setAlpha(0);
+        rule4sub.setAlpha(0);
+        startButton.setAlpha(0);
+        startButtonText.setAlpha(0);
+
+        this.tweens.add({
+            targets: [overlay, title, explainHeader, explainText, rule1, rule1sub, rule2, rule2sub, rule3, rule3sub, rule4, rule4sub, startButton, startButtonText],
+            alpha: 1,
+            duration: 400,
+            ease: 'Power2'
         });
     }
     
@@ -3919,7 +4456,7 @@ export class DefogGame extends Phaser.Scene {
         });
     }
     
-    showHighscores() {
+    async showHighscores() {
         const width = this.scale.width;
         const height = this.scale.height;
         
@@ -3928,115 +4465,110 @@ export class DefogGame extends Phaser.Scene {
             .setOrigin(0).setDepth(11000).setScrollFactor(0).setInteractive();
         
         // Title
-        const title = this.add.text(width / 2, 60, '🏆 HIGHSCORES 🏆', {
-            fontSize: '48px',
+        const usingFirebase = window.firebaseInitialized;
+        const titleText = usingFirebase ? '� GLOBAL LEADERBOARD 🌐' : '🏆 YOUR BEST SCORES 🏆';
+        const title = this.add.text(width / 2, 40, titleText, {
+            fontSize: '36px',
             color: '#ffaa00',
             fontStyle: 'bold',
             fontFamily: 'Arial'
         }).setOrigin(0.5).setDepth(11001).setScrollFactor(0);
         
-        // Get and sort scores
-        const scores = this.getScores();
-        const topScores = [...scores]
-            .sort((a, b) => {
-                // Sort by diamonds first (descending), then by time (ascending)
-                if (b.diamonds !== a.diamonds) return b.diamonds - a.diamonds;
-                return a.time - b.time;
-            })
-            .slice(0, 10); // Top 10
+        // Subtitle
+        const subtitleText = usingFirebase ? 'Top 5 fastest times per level (worldwide)' : 'Your personal best times';
+        const subtitle = this.add.text(width / 2, 80, subtitleText, {
+            fontSize: '16px',
+            color: '#aaaaaa',
+            fontFamily: 'Arial'
+        }).setOrigin(0.5).setDepth(11001).setScrollFactor(0);
         
-        // Fastest times
-        const fastestScores = [...scores]
-            .sort((a, b) => a.time - b.time)
-            .slice(0, 5); // Top 5 fastest
-        
-        // Column headers
-        const headerY = 130;
-        this.add.text(width / 2 - 300, headerY, 'BEST SCORES', {
+        // Loading message
+        const loadingText = this.add.text(width / 2, height / 2, 'Loading scores...', {
             fontSize: '24px',
-            color: '#ffaa00',
-            fontStyle: 'bold',
+            color: '#ffffff',
             fontFamily: 'Arial'
         }).setOrigin(0.5).setDepth(11001).setScrollFactor(0);
         
-        this.add.text(width / 2 + 300, headerY, 'FASTEST TIMES', {
-            fontSize: '24px',
-            color: '#ffaa00',
-            fontStyle: 'bold',
-            fontFamily: 'Arial'
-        }).setOrigin(0.5).setDepth(11001).setScrollFactor(0);
+        // Load global scores for all 5 levels
+        const allLevelScores = {};
+        if (usingFirebase) {
+            try {
+                for (let level = 1; level <= 5; level++) {
+                    allLevelScores[level] = await this.loadGlobalLeaderboard(level);
+                }
+            } catch (error) {
+                console.error('Error loading leaderboard:', error);
+            }
+        }
         
-        // Display top 10 scores (left column)
-        topScores.forEach((score, index) => {
-            const yPos = 170 + (index * 32);
-            const minutes = Math.floor(score.time / 60);
-            const secs = score.time % 60;
-            const timeStr = `${minutes}:${secs.toString().padStart(2, '0')}`;
-            const date = new Date(score.date);
-            const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
-            
-            const rank = this.add.text(width / 2 - 400, yPos, `${index + 1}.`, {
-                fontSize: '18px',
-                color: index < 3 ? '#ffaa00' : '#ffffff',
-                fontStyle: index < 3 ? 'bold' : 'normal',
-                fontFamily: 'Arial'
-            }).setOrigin(0, 0.5).setDepth(11001).setScrollFactor(0);
-            
-            const scoreText = this.add.text(width / 2 - 370, yPos, `${score.diamonds}💎`, {
-                fontSize: '18px',
-                color: index < 3 ? '#ffaa00' : '#ffffff',
-                fontStyle: index < 3 ? 'bold' : 'normal',
-                fontFamily: 'Arial'
-            }).setOrigin(0, 0.5).setDepth(11001).setScrollFactor(0);
-            
-            const timeText = this.add.text(width / 2 - 250, yPos, `⏱️${timeStr}`, {
-                fontSize: '16px',
-                color: '#aaaaaa',
-                fontFamily: 'Arial'
-            }).setOrigin(0, 0.5).setDepth(11001).setScrollFactor(0);
-            
-            const dateText = this.add.text(width / 2 - 170, yPos, dateStr, {
-                fontSize: '14px',
-                color: '#888888',
-                fontFamily: 'Arial'
-            }).setOrigin(0, 0.5).setDepth(11001).setScrollFactor(0);
-        });
+        // Remove loading text
+        loadingText.destroy();
         
-        // Display top 5 fastest times (right column)
-        fastestScores.forEach((score, index) => {
-            const yPos = 170 + (index * 32);
-            const minutes = Math.floor(score.time / 60);
-            const secs = score.time % 60;
-            const timeStr = `${minutes}:${secs.toString().padStart(2, '0')}`;
-            const date = new Date(score.date);
-            const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+        // Display top 5 per level in a compact format
+        let startY = 115;
+        const levelSpacing = 90;
+        
+        for (let level = 1; level <= 5; level++) {
+            const yPos = startY + ((level - 1) * levelSpacing);
             
-            const rank = this.add.text(width / 2 + 200, yPos, `${index + 1}.`, {
-                fontSize: '18px',
-                color: index < 3 ? '#ffaa00' : '#ffffff',
-                fontStyle: index < 3 ? 'bold' : 'normal',
+            // Level header
+            this.add.text(width / 2 - 380, yPos, `Level ${level}`, {
+                fontSize: '24px',
+                color: '#ffdd00',
+                fontStyle: 'bold',
                 fontFamily: 'Arial'
-            }).setOrigin(0, 0.5).setDepth(11001).setScrollFactor(0);
+            }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
             
-            const timeText = this.add.text(width / 2 + 230, yPos, `⏱️${timeStr}`, {
-                fontSize: '18px',
-                color: index < 3 ? '#ffaa00' : '#ffffff',
-                fontStyle: index < 3 ? 'bold' : 'normal',
-                fontFamily: 'Arial'
-            }).setOrigin(0, 0.5).setDepth(11001).setScrollFactor(0);
+            // Get scores for this level
+            const levelScores = usingFirebase ? allLevelScores[level] : [];
             
-            const scoreText = this.add.text(width / 2 + 330, yPos, `${score.diamonds}💎`, {
-                fontSize: '16px',
-                color: '#aaaaaa',
-                fontFamily: 'Arial'
-            }).setOrigin(0, 0.5).setDepth(11001).setScrollFactor(0);
-            
-            const dateText = this.add.text(width / 2 + 400, yPos, dateStr, {
-                fontSize: '14px',
-                color: '#888888',
-                fontFamily: 'Arial'
-            }).setOrigin(0, 0.5).setDepth(11001).setScrollFactor(0);
-        });
+            if (levelScores && levelScores.length > 0) {
+                // Display top 5 scores
+                levelScores.forEach((score, index) => {
+                    const scoreY = yPos + 28 + (index * 12);
+                    const timeStr = this.formatTime(score.time);
+                    const rank = index + 1;
+                    const rankColor = index === 0 ? '#ffdd00' : (index === 1 ? '#dddddd' : (index === 2 ? '#cc8844' : '#999999'));
+                    
+                    // Rank + Time + Diamonds
+                    const scoreText = `${rank}. ⏱️${timeStr}  ${score.diamonds}💎`;
+                    this.add.text(width / 2 - 380, scoreY, scoreText, {
+                        fontSize: '14px',
+                        color: rankColor,
+                        fontFamily: 'Arial'
+                    }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
+                });
+            } else if (!usingFirebase) {
+                // Show local score
+                const localScore = this.highScores.levels[level];
+                if (localScore) {
+                    const scoreY = yPos + 28;
+                    const timeStr = this.formatTime(localScore.time);
+                    const scoreText = `⏱️${timeStr}  ${localScore.diamonds}💎  (your best)`;
+                    this.add.text(width / 2 - 380, scoreY, scoreText, {
+                        fontSize: '14px',
+                        color: '#00ff00',
+                        fontFamily: 'Arial'
+                    }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
+                } else {
+                    const scoreY = yPos + 28;
+                    this.add.text(width / 2 - 380, scoreY, '— Not completed yet —', {
+                        fontSize: '14px',
+                        color: '#666666',
+                        fontStyle: 'italic',
+                        fontFamily: 'Arial'
+                    }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
+                }
+            } else {
+                const scoreY = yPos + 28;
+                this.add.text(width / 2 - 380, scoreY, '— No scores yet —', {
+                    fontSize: '14px',
+                    color: '#666666',
+                    fontStyle: 'italic',
+                    fontFamily: 'Arial'
+                }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
+            }
+        }
         
         // Close button
         const closeButton = this.add.rectangle(width / 2, height - 80, 200, 50, 0xaa3333, 1)
@@ -4133,6 +4665,344 @@ export class DefogGame extends Phaser.Scene {
         const scores = this.getScores();
         if (scores.length === 0) return 0;
         return Math.max(...scores.map(s => s.diamonds));
+    }
+    
+    // ========== HIGH SCORE SYSTEM ==========
+    
+    formatTime(milliseconds) {
+        const totalSeconds = Math.floor(milliseconds / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    calculateDiamondScore(rhodopsins, timeMs) {
+        // Calculate diamond score from rhodopsin counts + time bonus
+        const monoValue = Math.floor(rhodopsins.monochrome * 0.5);
+        const redValue = Math.floor(rhodopsins.red * 10);
+        const greenValue = Math.floor(rhodopsins.green * 2);
+        const blueValue = Math.floor(rhodopsins.blue * 5);
+        
+        // Time-based bonus (faster = more diamonds)
+        const timeSeconds = Math.floor(timeMs / 1000);
+        let timeBonus;
+        if (timeSeconds < 180) { // < 3 minutes
+            timeBonus = 5000;
+        } else if (timeSeconds < 240) { // < 4 minutes
+            timeBonus = 4000;
+        } else if (timeSeconds < 300) { // < 5 minutes
+            timeBonus = 3000;
+        } else if (timeSeconds < 360) { // < 6 minutes
+            timeBonus = 2500;
+        } else if (timeSeconds < 420) { // < 7 minutes
+            timeBonus = 2000;
+        } else if (timeSeconds < 480) { // < 8 minutes
+            timeBonus = 1500;
+        } else if (timeSeconds < 540) { // < 9 minutes
+            timeBonus = 1000;
+        } else if (timeSeconds < 600) { // < 10 minutes
+            timeBonus = 800;
+        } else {
+            // Gradual decrease after 10 minutes
+            timeBonus = Math.max(100, Math.floor(4800 / timeSeconds));
+        }
+        
+        return monoValue + redValue + greenValue + blueValue + timeBonus;
+    }
+    
+    loadHighScores() {
+        // Load high scores from localStorage
+        const saved = localStorage.getItem('ergo_highscores');
+        if (saved) {
+            this.highScores = JSON.parse(saved);
+        } else {
+            // Initialize empty high scores for all 5 levels
+            this.highScores = {
+                levels: {
+                    1: null,
+                    2: null,
+                    3: null,
+                    4: null,
+                    5: null
+                },
+                totalBestTime: null,
+                completedAllLevels: false
+            };
+        }
+        console.log('📊 High scores loaded:', this.highScores);
+    }
+    
+    saveHighScores() {
+        localStorage.setItem('ergo_highscores', JSON.stringify(this.highScores));
+        console.log('💾 High scores saved');
+    }
+    
+    updateHighScore(level, time, diamonds, rhodopsins) {
+        const currentBest = this.highScores.levels[level];
+        const isNewBest = !currentBest || time < currentBest.time;
+        
+        if (isNewBest) {
+            this.highScores.levels[level] = {
+                time: time,
+                diamonds: diamonds,
+                rhodopsins: rhodopsins, // Store full rhodopsin breakdown
+                date: new Date().toISOString(),
+                dateFormatted: new Date().toLocaleString()
+            };
+            this.saveHighScores();
+            console.log(`🏆 NEW BEST TIME for Level ${level}: ${this.formatTime(time)}, ${diamonds}💎`);
+            
+            // Upload to global leaderboard (Firebase)
+            this.uploadScoreToFirebase(level, time, diamonds, rhodopsins);
+        }
+        
+        return isNewBest;
+    }
+    
+    // ========== FIREBASE GLOBAL LEADERBOARD FUNCTIONS ==========
+    
+    async uploadScoreToFirebase(level, time, diamonds, rhodopsins) {
+        // Check if Firebase is available
+        if (!window.firebaseInitialized || !window.firebaseDB) {
+            console.log('⚠️ Firebase not available, score saved locally only');
+            return;
+        }
+        
+        try {
+            const db = window.firebaseDB;
+            
+            // Upload score to Firestore
+            await db.collection('leaderboard').add({
+                level: level,
+                time: time,
+                diamonds: diamonds,
+                rhodopsins: rhodopsins,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                dateStr: new Date().toLocaleDateString(),
+                playerName: 'Anonymous', // Could add player name input later
+                version: '0.04'
+            });
+            
+            console.log(`✅ Score uploaded to global leaderboard! Level ${level}: ${this.formatTime(time)}, ${diamonds}💎`);
+        } catch (error) {
+            console.error('❌ Failed to upload score to Firebase:', error);
+            // Game continues normally, just no global score
+        }
+    }
+    
+    async loadGlobalLeaderboard(level) {
+        // Check if Firebase is available
+        if (!window.firebaseInitialized || !window.firebaseDB) {
+            console.log('⚠️ Firebase not available, showing local scores only');
+            return [];
+        }
+        
+        try {
+            const db = window.firebaseDB;
+            
+            // Get top 5 scores for this level, sorted by time (fastest first)
+            const snapshot = await db.collection('leaderboard')
+                .where('level', '==', level)
+                .orderBy('time', 'asc')
+                .limit(5)
+                .get();
+            
+            const scores = [];
+            snapshot.forEach(doc => {
+                scores.push(doc.data());
+            });
+            
+            console.log(`📥 Loaded ${scores.length} global scores for level ${level}`);
+            return scores;
+        } catch (error) {
+            console.error('❌ Failed to load global leaderboard:', error);
+            return [];
+        }
+    }
+    
+    checkAllLevelsCompleted() {
+        // Check if all 5 levels have been completed
+        for (let i = 1; i <= 5; i++) {
+            if (!this.highScores.levels[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    getTotalTime() {
+        // Sum of all level best times
+        let total = 0;
+        for (let i = 1; i <= 5; i++) {
+            if (this.highScores.levels[i]) {
+                total += this.highScores.levels[i].time;
+            }
+        }
+        return total;
+    }
+    
+    getTotalDiamonds() {
+        // Sum of all level diamond scores
+        let total = 0;
+        for (let i = 1; i <= 5; i++) {
+            if (this.highScores.levels[i] && this.highScores.levels[i].diamonds) {
+                total += this.highScores.levels[i].diamonds;
+            }
+        }
+        return total;
+    }
+    
+    showFinalRewardScreen() {
+        // Show final reward after completing all 5 levels
+        const width = this.scale.width;
+        const height = this.scale.height;
+        
+        // Dark overlay
+        const overlay = this.add.rectangle(0, 0, width * 2, height * 2, 0x000000, 0.95)
+            .setOrigin(0).setDepth(11000).setScrollFactor(0);
+        
+        // Title
+        const title = this.add.text(width / 2, 50, 
+            '🎉 CONGRATULATIONS! 🎉', {
+            fontSize: '56px',
+            color: '#FFD700',
+            fontStyle: 'bold',
+            fontFamily: 'Arial',
+            stroke: '#000000',
+            strokeThickness: 6
+        }).setOrigin(0.5).setDepth(11001).setScrollFactor(0);
+        
+        // Subtitle
+        const subtitle = this.add.text(width / 2, 120, 
+            'You completed all 5 levels!', {
+            fontSize: '32px',
+            color: '#00ff00',
+            fontFamily: 'Arial'
+        }).setOrigin(0.5).setDepth(11001).setScrollFactor(0);
+        
+        // Show Drosophila drawing
+        const rewardImage = this.add.image(width / 2, height / 2 - 20, 'finalReward');
+        rewardImage.setDepth(11001).setScrollFactor(0);
+        // Scale to fit nicely
+        const scale = Math.min(500 / rewardImage.width, 350 / rewardImage.height);
+        rewardImage.setScale(scale);
+        
+        // Total time and diamonds
+        const totalTime = this.getTotalTime();
+        const totalDiamonds = this.getTotalDiamonds();
+        const totalText = this.add.text(width / 2, height / 2 + 200, 
+            `🏆 Total: ${this.formatTime(totalTime)} | ${totalDiamonds}💎 🏆`, {
+            fontSize: '32px',
+            color: '#FFD700',
+            fontStyle: 'bold',
+            fontFamily: 'Arial',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(11001).setScrollFactor(0);
+        
+        // Diamond summary for all 5 levels
+        const diamondSpacing = 140;
+        const startX = width / 2 - (diamondSpacing * 2);
+        const diamondY = height / 2 + 290;
+        const diamondSize = 100;
+        
+        for (let i = 1; i <= 5; i++) {
+            const diamondX = startX + (i - 1) * diamondSpacing;
+            const levelScore = this.highScores.levels[i];
+            
+            // Diamond shape
+            const diamondBg = this.add.graphics();
+            diamondBg.fillStyle(0x1a1a1a, 0.9);
+            diamondBg.lineStyle(2, 0xFFD700);
+            
+            diamondBg.beginPath();
+            diamondBg.moveTo(diamondX, diamondY - diamondSize / 2); // Top
+            diamondBg.lineTo(diamondX + diamondSize / 2, diamondY); // Right
+            diamondBg.lineTo(diamondX, diamondY + diamondSize / 2); // Bottom
+            diamondBg.lineTo(diamondX - diamondSize / 2, diamondY); // Left
+            diamondBg.closePath();
+            diamondBg.fillPath();
+            diamondBg.strokePath();
+            diamondBg.setDepth(11001).setScrollFactor(0);
+            
+            // Level number
+            const levelNum = this.add.text(diamondX, diamondY - 30,
+                `${i}`, {
+                fontSize: '24px',
+                color: '#FFD700',
+                fontFamily: 'Arial',
+                fontStyle: 'bold'
+            }).setOrigin(0.5).setDepth(11002).setScrollFactor(0);
+            
+            // Diamond score and time
+            if (levelScore) {
+                const diamondText = this.add.text(diamondX, diamondY - 5,
+                    `${levelScore.diamonds}💎`, {
+                    fontSize: '18px',
+                    color: '#FFD700',
+                    fontFamily: 'Arial',
+                    fontStyle: 'bold'
+                }).setOrigin(0.5).setDepth(11002).setScrollFactor(0);
+                
+                const timeText = this.add.text(diamondX, diamondY + 20,
+                    this.formatTime(levelScore.time), {
+                    fontSize: '14px',
+                    color: '#ffffff',
+                    fontFamily: 'Arial',
+                    fontStyle: 'bold'
+                }).setOrigin(0.5).setDepth(11002).setScrollFactor(0);
+            }
+        }
+        
+        // Play Again button
+        const playAgainButton = this.add.text(width / 2, height - 60,
+            '▶ Play All Levels Again', {
+            fontSize: '28px',
+            color: '#ffffff',
+            backgroundColor: '#0066cc',
+            padding: { x: 25, y: 12 },
+            fontStyle: 'bold',
+            fontFamily: 'Arial'
+        }).setOrigin(0.5).setDepth(11001).setScrollFactor(0);
+        
+        playAgainButton.setInteractive({ useHandCursor: true });
+        playAgainButton.on('pointerover', () => {
+            playAgainButton.setStyle({ backgroundColor: '#0088ff' });
+        });
+        playAgainButton.on('pointerout', () => {
+            playAgainButton.setStyle({ backgroundColor: '#0066cc' });
+        });
+        playAgainButton.on('pointerdown', () => {
+            // Reset to level 1 and restart
+            this.registry.set('currentLevel', 1);
+            this.scene.restart();
+        });
+        
+        // Animate entrance
+        this.tweens.add({
+            targets: [title, subtitle],
+            scale: { from: 0, to: 1 },
+            alpha: { from: 0, to: 1 },
+            duration: 800,
+            ease: 'Back.easeOut'
+        });
+        
+        this.tweens.add({
+            targets: rewardImage,
+            scale: { from: 0, to: scale },
+            alpha: { from: 0, to: 1 },
+            duration: 1000,
+            delay: 300,
+            ease: 'Elastic.easeOut'
+        });
+        
+        this.tweens.add({
+            targets: [totalText, breakdownText, levelsText, playAgainButton],
+            alpha: { from: 0, to: 1 },
+            duration: 600,
+            delay: 800,
+            ease: 'Power2'
+        });
     }
 }
 
