@@ -3069,7 +3069,7 @@ export class DefogGame extends Phaser.Scene {
             }
             if (edgeCurrencyRed > 0) {
                 const redWeight = weights.r || 1.0;
-                const redAwarded = Math.floor((edgeCurrencyRed / 35) * redWeight);
+                const redAwarded = Math.floor((edgeCurrencyRed / 34) * redWeight);
                 if (redAwarded > 0) {
                     this.currencySystem.add('red', redAwarded);
                 }
