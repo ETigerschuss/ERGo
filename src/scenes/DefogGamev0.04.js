@@ -2947,8 +2947,10 @@ export class DefogGame extends Phaser.Scene {
         const graphicsR = this.make.graphics();
         const graphicsG = this.make.graphics();
         const graphicsB = this.make.graphics();
+        const graphicsMono = this.make.graphics(); // v0.04: Color insects also reveal monochrome
         
         let pixelsPainted = 0;
+        let edgeCurrency = 0; // v0.04: Track monochrome edge detection
         let edgeCurrencyGreen = 0; // v0.04: Track edge detection for green currency
         let edgeCurrencyRed = 0;
         let edgeCurrencyBlue = 0;
@@ -3011,6 +3013,38 @@ export class DefogGame extends Phaser.Scene {
                     else if (maxContrastB > 20) edgeCurrencyBlue += 0.1;
                     
                     this.revealedPixelsColor.add(pixelKey); // Mark as revealed for COLOR
+                    
+                    // v0.04: Color insects also reveal monochrome and award monochrome rhodopsin
+                    const isNewPixelMono = !this.revealedPixelsMono.has(pixelKey);
+                    if (isNewPixelMono) {
+                        // Calculate brightness for monochrome edge detection
+                        const brightness = (r + g + b) / 3;
+                        let maxContrast = 0;
+                        for (let ny = -1; ny <= 1; ny++) {
+                            for (let nx = -1; nx <= 1; nx++) {
+                                if (nx === 0 && ny === 0) continue;
+                                const npx = px + nx;
+                                const npy = py + ny;
+                                if (npx >= 0 && npx < this.hiddenImage.width && npy >= 0 && npy < this.hiddenImage.height) {
+                                    const neighborData = this.imageContext.getImageData(npx, npy, 1, 1).data;
+                                    const neighborBrightness = (neighborData[0] + neighborData[1] + neighborData[2]) / 3;
+                                    const contrast = Math.abs(brightness - neighborBrightness);
+                                    maxContrast = Math.max(maxContrast, contrast);
+                                }
+                            }
+                        }
+                        
+                        // Award monochrome rhodopsin based on edge strength
+                        if (maxContrast > 100) {
+                            edgeCurrency += 1; // Strong edge
+                        } else if (maxContrast > 50) {
+                            edgeCurrency += 0.5; // Medium edge
+                        } else if (maxContrast > 20) {
+                            edgeCurrency += 0.1; // Weak edge
+                        }
+                        
+                        this.revealedPixelsMono.add(pixelKey); // Mark as revealed for MONOCHROME
+                    }
                 }
                 
                 // Base alpha from distance and focus
@@ -3045,6 +3079,16 @@ export class DefogGame extends Phaser.Scene {
                     graphicsB.fillCircle(x + dx, y + dy, step * 0.5);
                 }
                 
+                // v0.04: Color insects also reveal monochrome layer
+                if (this.greenCurrencyUnlocked) {
+                    const brightness = (r + g + b) / 3;
+                    const inverted = 255 - brightness;
+                    const gray = Phaser.Display.Color.GetColor(inverted, inverted, inverted);
+                    const monoAlpha = baseFalloff * 0.9;
+                    graphicsMono.fillStyle(gray, monoAlpha);
+                    graphicsMono.fillCircle(x + dx, y + dy, step * 0.5);
+                }
+                
                 pixelsPainted++;
             }
         }
@@ -3055,9 +3099,23 @@ export class DefogGame extends Phaser.Scene {
         this.colorCanvasG.draw(graphicsG, 0, 0);
         this.colorCanvasB.draw(graphicsB, 0, 0);
         
+        // v0.04: Color insects also reveal monochrome layer
+        if (this.greenCurrencyUnlocked) {
+            this.canvas.draw(graphicsMono, 0, 0);
+        }
+        
         graphicsR.destroy();
         graphicsG.destroy();
         graphicsB.destroy();
+        graphicsMono.destroy();
+        
+        // v0.04: Color insects also award monochrome rhodopsin
+        if (edgeCurrency > 0) {
+            const monoAwarded = Math.floor(edgeCurrency / 8);
+            if (monoAwarded > 0) {
+                this.currencySystem.add('monochrome', monoAwarded);
+            }
+        }
         
         if (this.greenCurrencyUnlocked) {
             if (edgeCurrencyGreen > 0) {
@@ -3081,6 +3139,13 @@ export class DefogGame extends Phaser.Scene {
                     this.currencySystem.add('blue', blueAwarded);
                 }
             }
+        }
+        
+        // v0.04: Check if we should unlock green currency (color insects earning monochrome)
+        if (!this.greenCurrencyUnlocked && this.currencySystem.getCurrencies().monochrome >= 100) {
+            this.greenCurrencyUnlocked = true;
+            // Don't show unlock prompt - silently unlock
+            // this.showGreenCurrencyUnlock();
         }
         
         // v0.04: Track defogging activity
