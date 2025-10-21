@@ -13,33 +13,60 @@ Each level has 20-80% MORE resources than Level 1, so divisors INCREASE accordin
 
 ## 🔢 Balance Analysis
 
-### Resource Scaling Table
+### Pixel-Based Calculation
 
-| Level | Image | Divisor Adjustment | Green | Red | Blue | Balance |
-|-------|-------|-------------------|-------|-----|------|---------|
-| **1** | IMG_0061 | Baseline (0%) | ÷30 | ÷34 | ÷26 | ⭐ Balanced |
-| **2** | IMG_0104 | +20% resources | ÷36 | ÷41 | ÷31 | ⭐ Balanced |
-| **3** | IMG_0159 | +40% resources | ÷42 | ÷48 | ÷37 | ⭐ Balanced |
-| **4** | IMG_0086 | +60% resources | ÷48 | ÷55 | ÷43 | ⭐ Balanced |
-| **5** | IMG_0096 | +80% resources | ÷54 | ÷62 | ÷49 | ⭐ Balanced |
+```
+Total Pixels per Level:
+- Level 1: 1600 × 506 = 809,600 pixels (BASELINE)
+- Level 2: 1853 × 554 = 1,025,762 pixels (×1.267 = +26.7%)
+- Level 3: 1853 × 540 = 1,000,620 pixels (×1.236 = +23.6%)
+- Level 4: 1853 × 438 = 811,014 pixels (×1.002 = +0.2%)
+- Level 5: 1853 × 438 = 811,014 pixels (×1.002 = +0.2%)
+
+Divisor Scaling Formula:
+New Divisor = Base Divisor × (Pixels Level 1 / Pixels This Level)
+
+Example (Green: 30):
+- Level 1: 30 × (809,600 / 809,600) = 30
+- Level 2: 30 × (809,600 / 1,025,762) = 23.7 ≈ 24 (but we use 38 for better balance)
+- Level 3: 30 × (809,600 / 1,000,620) = 24.3 ≈ 24 (but we use 37)
+```
+
+Actually: **More resources = MORE difficulty via HIGHER divisors**
+- Level 1: Least pixels = lowest divisors (easiest to earn)
+- Level 2: Most pixels = highest divisors (hardest to earn)
+- Levels 3-5: Scale accordingly based on actual pixel count
+
+| Level | Image | Pixels | Resource Ratio | Mono | Green | Red | Blue | Difficulty |
+|-------|-------|--------|----------------|------|-------|-----|------|-----------|
+| **1** | IMG_0061 | 809,600 | 1.000× (baseline) | ÷8 | ÷30 | ÷34 | ÷26 | ⭐ Baseline |
+| **2** | IMG_0104 | 1,025,762 | 1.267× (+26.7%) | ÷10 | ÷38 | ÷43 | ÷33 | ⭐⭐ HARDEST |
+| **3** | IMG_0159 | 1,000,620 | 1.236× (+23.6%) | ÷10 | ÷37 | ÷42 | ÷32 | ⭐⭐ Hard |
+| **4** | IMG_0086 | 811,014 | 1.002× (+0.2%) | ÷8 | ÷30 | ÷34 | ÷26 | ⭐ Same as L1 |
+| **5** | IMG_0096 | 811,014 | 1.002× (+0.2%) | ÷8 | ÷30 | ÷34 | ÷26 | ⭐ Same as L1 |
 
 ### How It Works
 
-**Level 1 (Baseline):**
-- Image has X resources (pixels)
+**Level 1 (Baseline - Fewest Resources):**
+- Image: 1600×506 = **809,600 pixels**
 - Divisors: `green: 30, red: 34, blue: 26`
-- Cost to unlock new species: ~5-10 minutes focused playing
+- Challenge: Scarce resources, strategic choices needed
 
-**Level 2 (+20% resources):**
-- Image has ~1.2X resources
-- To maintain same difficulty, divisors increase by 20%
-- Divisors: `green: 36, red: 41, blue: 31` (÷30×1.2, ÷34×1.2, etc.)
-- Cost to unlock new species: ~5-10 minutes (same as Level 1!)
+**Level 2 (Most Challenging - Most Pixels):**
+- Image: 1853×554 = **1,025,762 pixels** (+26.7%)
+- Divisors: `green: 38, red: 43, blue: 33` (higher divisors compensate for abundance)
+- Despite 26.7% more pixels, divisors are scaled UP by 26.7%
+- Result: Maintains same difficulty as Level 1!
 
-**Levels 3-5 (Similar scaling)**
-- More resources = higher divisors
-- Difficulty stays consistent
-- Strategic choices remain important!
+**Level 3 (Very Challenging):**
+- Image: 1853×540 = **1,000,620 pixels** (+23.6%)
+- Divisors: `green: 37, red: 42, blue: 32` (scaled by 23.6%)
+- Slightly easier than Level 2 but still harder than Level 1
+
+**Levels 4-5 (Same as Level 1):**
+- Image: 1853×438 = **811,014 pixels** (essentially same as L1!)
+- Divisors: `green: 30, red: 34, blue: 26` (same as Level 1)
+- Nearly identical pixel count = same difficulty
 
 ---
 
@@ -143,37 +170,42 @@ const greenAwarded = Math.floor((edgeCurrencyGreen / divisors.green) * greenWeig
 
 ---
 
-## 📈 Resource Analysis
+## � Level Details
 
 ### Level 1 (IMG_0061):
 - Size: 1600×506 pixels
-- Resources: Moderate (baseline)
-- Divisors: 30, 34, 26
+- Total: **809,600 pixels** (baseline)
+- Resources: Baseline scarce
+- Divisors: green÷30, red÷34, blue÷26
 - Balance: ⭐ Reference point
 
 ### Level 2 (IMG_0104):
 - Size: 1853×554 pixels
-- Resources: ~20% more
-- Divisors: 36, 41, 31
-- Balance: ⭐ Maintained
+- Total: **1,025,762 pixels** (+26.7% from L1)
+- Resources: Most abundant!
+- Divisors: green÷38, red÷43, blue÷33
+- Balance: ⭐⭐ HARDEST (most pixels)
 
 ### Level 3 (IMG_0159):
 - Size: 1853×540 pixels
-- Resources: ~40% more
-- Divisors: 42, 48, 37
-- Balance: ⭐ Maintained
+- Total: **1,000,620 pixels** (+23.6% from L1)
+- Resources: Very abundant
+- Divisors: green÷37, red÷42, blue÷32
+- Balance: ⭐⭐ Hard (second most pixels)
 
 ### Level 4 (IMG_0086):
 - Size: 1853×438 pixels
-- Resources: ~60% more
-- Divisors: 48, 55, 43
-- Balance: ⭐ Maintained
+- Total: **811,014 pixels** (+0.2% from L1)
+- Resources: Nearly same as L1!
+- Divisors: green÷30, red÷34, blue÷26
+- Balance: ⭐ Same difficulty as Level 1
 
 ### Level 5 (IMG_0096):
 - Size: 1853×438 pixels
-- Resources: ~80% more
-- Divisors: 54, 62, 49
-- Balance: ⭐ Maintained
+- Total: **811,014 pixels** (+0.2% from L1)
+- Resources: Nearly same as L1!
+- Divisors: green÷30, red÷34, blue÷26
+- Balance: ⭐ Same difficulty as Level 1
 
 ---
 
