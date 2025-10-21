@@ -3681,10 +3681,11 @@ export class DefogGame extends Phaser.Scene {
             this.finalRhodopsins = this.currencySystem.getCurrencies();
             this.finalDiamondScore = this.calculateDiamondScore(this.finalRhodopsins, this.finalTime);
             
-            // Update high score for this level
-            this.updateHighScore(
-                this.currentLevel, 
-                this.finalTime, 
+            // CRITICAL: Collect player name BEFORE uploading score to Firebase
+            // This ensures the score has the correct player name
+            this.collectPlayerNameThenSaveScore(
+                this.currentLevel,
+                this.finalTime,
                 this.finalDiamondScore,
                 this.finalRhodopsins
             );
@@ -4894,8 +4895,46 @@ export class DefogGame extends Phaser.Scene {
             
             localStorage.setItem('ergo_level1_scores', JSON.stringify(scores));
             console.log(`💾 Saved score: ${timeSeconds}s, ${diamonds}💎`);
+            
+            // Also submit to Firebase if available
+            this.submitScoreToFirebase(timeSeconds, diamonds);
         } catch (e) {
             console.error('Failed to save score:', e);
+        }
+    }
+    
+    submitScoreToFirebase(timeSeconds, diamonds) {
+        // Get Firebase instance
+        if (!window.firebaseInitialized || !window.firebaseDB) {
+            console.log('⚠️ Firebase not available - score saved locally only');
+            return;
+        }
+        
+        try {
+            const db = window.firebaseDB;
+            
+            // Get player name from localStorage (should already be set)
+            let playerName = localStorage.getItem('playerName') || 'Anonymous';
+            
+            console.log(`📤 Submitting score to Firebase: ${playerName} - ${timeSeconds}s, ${diamonds}💎, Level ${this.currentLevel}`);
+            
+            // Submit score to Firestore
+            db.collection('leaderboard').add({
+                level: this.currentLevel,
+                playerName: playerName,
+                time: timeSeconds,
+                diamonds: diamonds,
+                date: new Date().toISOString(),
+                timestamp: Math.floor(Date.now() / 1000)
+            }).then((docRef) => {
+                console.log(`✅ Score submitted to Firebase! Document ID: ${docRef.id}`);
+            }).catch((error) => {
+                console.error('❌ Failed to submit score to Firebase:', error);
+                console.error('Error code:', error.code);
+                console.error('Error message:', error.message);
+            });
+        } catch (e) {
+            console.error('Exception while submitting to Firebase:', e);
         }
     }
     
@@ -5015,6 +5054,50 @@ export class DefogGame extends Phaser.Scene {
         return isNewBest;
     }
     
+    async collectPlayerNameThenSaveScore(level, time, diamonds, rhodopsins) {
+        // Collect player name FIRST, then save score with name attached
+        // This is called immediately when level completes, before showing any UI
+        
+        try {
+            let playerName = localStorage.getItem('playerName') || '';
+            
+            if (!playerName) {
+                console.log('🎯 No player name found - collecting name for level completion');
+                // Show name input dialog
+                playerName = await this.showNameInputDialog();
+                
+                if (!playerName || playerName === null) {
+                    console.log('⚠️ Dialog returned null/empty - trying browser prompt as fallback');
+                    // Fallback to browser prompt if custom dialog failed
+                    playerName = prompt('Enter your name for the leaderboard:', '');
+                }
+                
+                if (playerName) {
+                    playerName = playerName.trim();
+                    localStorage.setItem('playerName', playerName);
+                    console.log(`✅ Saved player name: ${playerName}`);
+                } else {
+                    playerName = 'Anonymous'; // Default if user cancels
+                    localStorage.setItem('playerName', playerName);
+                    console.log(`ℹ️ Using default name: ${playerName}`);
+                }
+            } else {
+                console.log(`✅ Using existing player name: ${playerName}`);
+            }
+            
+            // NOW save the score with the name set
+            // Update high score for this level
+            const isNewBest = this.updateHighScore(level, time, diamonds, rhodopsins);
+            
+            console.log(`✅ Score saved with player name: ${playerName}`);
+            
+        } catch (error) {
+            console.error('Error collecting player name:', error);
+            // Fall back to updating score anyway
+            this.updateHighScore(level, time, diamonds, rhodopsins);
+        }
+    }
+    
     // ========== FIREBASE GLOBAL LEADERBOARD FUNCTIONS ==========
     
     async uploadScoreToFirebase(level, time, diamonds, rhodopsins) {
@@ -5031,7 +5114,11 @@ export class DefogGame extends Phaser.Scene {
         try {
             const db = window.firebaseDB;
             
+            // Get player name from localStorage
+            let playerName = localStorage.getItem('playerName') || 'Anonymous';
+            
             console.log(`📤 Uploading score to Firebase - Level ${level}: ${this.formatTime(time)}, ${diamonds}💎`);
+            console.log(`   Player: ${playerName}`);
             console.log('Firebase app:', firebase.app().name);
             console.log('Firestore instance:', !!db);
             
@@ -5044,7 +5131,7 @@ export class DefogGame extends Phaser.Scene {
                 timestamp: firebase.firestore.FieldValue.serverTimestamp(),
                 dateStr: new Date().toLocaleDateString(),
                 timeZone: new Date().toString(),
-                playerName: 'Anonymous',
+                playerName: playerName,
                 version: '0.04'
             });
             
