@@ -4787,7 +4787,8 @@ export class DefogGame extends Phaser.Scene {
         if (!window.firebaseInitialized || !window.firebaseDB) {
             console.warn('⚠️ Firebase not initialized:', {
                 firebaseInitialized: window.firebaseInitialized,
-                hasDB: !!window.firebaseDB
+                hasDB: !!window.firebaseDB,
+                firebase: typeof firebase !== 'undefined'
             });
             return;
         }
@@ -4796,9 +4797,11 @@ export class DefogGame extends Phaser.Scene {
             const db = window.firebaseDB;
             
             console.log(`📤 Uploading score to Firebase - Level ${level}: ${this.formatTime(time)}, ${diamonds}💎`);
+            console.log('Firebase app:', firebase.app().name);
+            console.log('Firestore instance:', !!db);
             
             // Upload score to Firestore
-            const result = await db.collection('leaderboard').add({
+            const docRef = await db.collection('leaderboard').add({
                 level: level,
                 time: time,
                 diamonds: diamonds,
@@ -4810,17 +4813,33 @@ export class DefogGame extends Phaser.Scene {
                 version: '0.04'
             });
             
-            console.log(`✅ Score uploaded to global leaderboard! Level ${level}: ${this.formatTime(time)}, ${diamonds}💎 (Doc ID: ${result.id})`);
-            return result;
+            console.log(`✅ SUCCESS! Score uploaded to global leaderboard!`);
+            console.log(`   Level ${level}: ${this.formatTime(time)}, ${diamonds}💎`);
+            console.log(`   Document ID: ${docRef.id}`);
+            
+            return docRef;
         } catch (error) {
-            console.error('❌ Failed to upload score to Firebase:', error);
-            console.error('Error details:', {
-                code: error.code,
-                message: error.message,
+            console.error('❌ FAILED to upload score to Firebase!');
+            console.error('Error code:', error.code);
+            console.error('Error message:', error.message);
+            console.error('Full error:', error);
+            
+            // Common Firebase errors
+            if (error.code === 'permission-denied') {
+                console.error('🔒 PERMISSION DENIED - Firestore security rules are blocking writes');
+                console.error('   Check Firestore Security Rules in Firebase Console');
+            } else if (error.code === 'failed-precondition') {
+                console.error('⚙️ FAILED PRECONDITION - Firestore might not be initialized');
+            } else if (error.code === 'unauthenticated') {
+                console.error('🔑 UNAUTHENTICATED - Need authentication (but test mode should allow this)');
+            }
+            
+            console.error('Score details:', {
                 level: level,
                 time: time,
                 diamonds: diamonds
             });
+            
             // Game continues normally, just no global score
             throw error;
         }
