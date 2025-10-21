@@ -4856,6 +4856,8 @@ export class DefogGame extends Phaser.Scene {
         try {
             const db = window.firebaseDB;
             
+            console.log(`🔍 Querying Firestore for level ${level} scores...`);
+            
             // Get top 5 scores for this level, sorted by time (fastest first)
             const snapshot = await db.collection('leaderboard')
                 .where('level', '==', level)
@@ -4865,13 +4867,33 @@ export class DefogGame extends Phaser.Scene {
             
             const scores = [];
             snapshot.forEach(doc => {
-                scores.push(doc.data());
+                scores.push({
+                    ...doc.data(),
+                    docId: doc.id  // Store document ID for reference
+                });
             });
             
             console.log(`📥 Loaded ${scores.length} global scores for level ${level}`);
+            if (scores.length > 0) {
+                console.log(`   Top score: ${scores[0].diamonds}💎 in ${this.formatTime(scores[0].time)}`);
+            }
             return scores;
         } catch (error) {
-            console.error('❌ Failed to load global leaderboard:', error);
+            console.error('❌ Failed to load global leaderboard!');
+            console.error('Error code:', error.code);
+            console.error('Error message:', error.message);
+            console.error('Full error:', error);
+            
+            // Common Firestore query errors
+            if (error.code === 'failed-precondition') {
+                console.error('⚠️ COMPOSITE INDEX NEEDED');
+                console.error('   Firestore requires a composite index for queries combining where() + orderBy()');
+                console.error('   Check Firebase Console → Firestore Database → Indexes');
+                console.error('   Or click the link in the error message to create the index automatically');
+            } else if (error.code === 'invalid-argument') {
+                console.error('❌ Invalid query - check field names and types');
+            }
+            
             return [];
         }
     }
