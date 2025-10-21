@@ -4628,31 +4628,35 @@ export class DefogGame extends Phaser.Scene {
                     playerScoreIndex = allScores.length;
                 }
                 
+                // INSERT player's score into the allScores array at the correct position
+                allScores.splice(playerScoreIndex, 0, playerScore);
+                
                 // Player's rank is 1-indexed position in the list
                 const playerRank = playerScoreIndex + 1;
                 
                 console.log(`📊 Player rank calculation for Level ${level}:`);
                 console.log(`   Player: ${playerName} - ${this.formatTime(playerScore.time)}`);
-                console.log(`   Rank: ${playerRank} out of ${allScores.length + 1} total`);
+                console.log(`   Rank: ${playerRank} out of ${allScores.length} total`);
                 console.log(`   Top 3 scores:`, allScores.slice(0, 3).map(s => `${s.playerName} (${this.formatTime(s.time)})`));
                 
-                // Display top 3 scores
+                // Display top 3 scores (which now includes player if in top 3)
                 const topScores = allScores.slice(0, 3);
                 topScores.forEach((score, index) => {
                     const scoreY = yPos + 28 + (index * 12);
                     const timeStr = this.formatTime(score.time);
                     const rank = index + 1;
                     const rankColor = index === 0 ? '#ffdd00' : (index === 1 ? '#dddddd' : '#cc8844');
-                    const scoreText = `${rank}. ⏱️${timeStr}  ${score.diamonds}💎 - ${score.playerName}`;
+                    const isPlayer = (score.playerName === playerName && score.isLocal);
                     
-                    // Highlight if it's the player's score in top 3
-                    const highlight = (score.playerName === playerName) ? ' ✓' : '';
+                    const scoreText = `${rank}. ⏱️${timeStr}  ${score.diamonds}💎 - ${score.playerName}${isPlayer ? ' (you)' : ''}`;
                     
-                    this.add.text(width / 2 - 380, scoreY, scoreText + highlight, {
+                    this.add.text(width / 2 - 380, scoreY, scoreText, {
                         fontSize: '14px',
                         color: rankColor,
                         fontFamily: 'Arial',
-                        fontStyle: (score.playerName === playerName) ? 'bold' : 'normal'
+                        fontStyle: isPlayer ? 'bold' : 'normal',
+                        backgroundColor: isPlayer ? '#1a1a00' : undefined,
+                        padding: isPlayer ? { x: 4, y: 2 } : undefined
                     }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
                 });
                 
