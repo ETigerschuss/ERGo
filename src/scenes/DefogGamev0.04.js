@@ -4583,6 +4583,7 @@ export class DefogGame extends Phaser.Scene {
             // Get local score
             const localScore = this.highScores.levels[level];
             let playerScore = null;
+            let playerScoreIndex = -1; // Track which score is the player's
             
             if (localScore) {
                 playerScore = {
@@ -4605,18 +4606,25 @@ export class DefogGame extends Phaser.Scene {
             }
             
             if (playerScore) {
+                // ALWAYS include player's local score in the ranking
                 // Sort all scores by time to find player's rank
                 allScores.sort((a, b) => a.time - b.time);
                 
-                // Find player rank (1-indexed)
-                let playerRank = allScores.findIndex(s => 
-                    s.playerName === playerName && s.time === playerScore.time
-                ) + 1;
+                // Find where player's score would be inserted
+                playerScoreIndex = allScores.findIndex(s => playerScore.time < s.time);
                 
-                if (playerRank === 0) {
-                    // Player score not in global list, so add at the end
-                    playerRank = allScores.length + 1;
+                // If player score is not faster than any existing score, it goes at the end
+                if (playerScoreIndex === -1) {
+                    playerScoreIndex = allScores.length;
                 }
+                
+                // Player's rank is 1-indexed position in the list
+                const playerRank = playerScoreIndex + 1;
+                
+                console.log(`📊 Player rank calculation for Level ${level}:`);
+                console.log(`   Player: ${playerName} - ${this.formatTime(playerScore.time)}`);
+                console.log(`   Rank: ${playerRank} out of ${allScores.length + 1} total`);
+                console.log(`   Top 3 scores:`, allScores.slice(0, 3).map(s => `${s.playerName} (${this.formatTime(s.time)})`));
                 
                 // Display top 3 scores
                 const topScores = allScores.slice(0, 3);
