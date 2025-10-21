@@ -2664,13 +2664,23 @@ export class DefogGame extends Phaser.Scene {
                     this.activeSpecies.delete(dyingSpeciesId);
                     const dyingSpeciesData = INSECT_DATABASE[dyingSpeciesId];
                     const family = dyingSpeciesData.superfamily;
-                    this.activeFamilies.delete(family);
                     console.log(`🔓 All ${dyingSpeciesData.name} have died - can respawn now!`);
-                    console.log(`🔓 Family ${family} is now FREE - you can spawn ANY species from this family!`);
-                    console.log(`   → Check the boxes - they should turn from RED to green/blue depending on affordability`);
                     console.log(`   → Active species remaining:`, Array.from(this.activeSpecies));
+                    
+                    // Check if ANY species from this family are still alive
+                    const familyHasOtherSpecies = this.insects.filter(i => i !== insect).some(i => i.superfamily === family);
+                    
+                    if (!familyHasOtherSpecies) {
+                        // ONLY delete family if NO other species from this family are alive
+                        this.activeFamilies.delete(family);
+                        console.log(`🔓 Family ${family} is now COMPLETELY FREE - you can spawn ANY species from this family!`);
+                    } else {
+                        // Family still has other species alive - DON'T delete it, just update highlights
+                        console.log(`⚠️ Family ${family} still has other species alive - family remains occupied`);
+                    }
+                    
                     console.log(`   → Active families remaining:`, Array.from(this.activeFamilies.keys()));
-                    // Update box highlights to remove family blocking
+                    // Update box highlights to reflect current state
                     this.updateSpeciesBoxHighlights();
                 }
                 
