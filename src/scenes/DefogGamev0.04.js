@@ -163,11 +163,23 @@ export class DefogGame extends Phaser.Scene {
         this.timerStopped = false;
         this.finalTime = 0;
         
+        // Level-specific divisors for resource balance
+        // Level 1 (baseline): divisors = {mono: 8, green: 30, red: 34, blue: 26}
+        // Levels 2-5 have MORE resources, so divisors INCREASE to maintain difficulty
+        this.levelDivisors = {
+            1: { monochrome: 8, green: 30, red: 34, blue: 26 },    // Baseline - most scarce
+            2: { monochrome: 8, green: 36, red: 41, blue: 31 },    // ~20% more resources
+            3: { monochrome: 8, green: 42, red: 48, blue: 37 },    // ~40% more resources
+            4: { monochrome: 8, green: 48, red: 55, blue: 43 },    // ~60% more resources
+            5: { monochrome: 8, green: 54, red: 62, blue: 49 }     // ~80% more resources
+        };
+        
         // High score system - load from localStorage
         this.loadHighScores();
         
         console.log('🔓 Starting unlocked insects:', this.unlockedInsects);
         console.log('💰 Starting with 10 monochrome - buy your first species!');
+        console.log(`📊 Level ${this.currentLevel} divisors:`, this.levelDivisors[this.currentLevel]);
         // ==========================================
 
         // Create insects array (starts empty - insects spawn over time)
@@ -2990,9 +3002,12 @@ export class DefogGame extends Phaser.Scene {
             this.bwCanvas.draw(graphics, 0, 0);
             graphics.destroy();
             
+            // Get level-specific divisors for resource balance
+            const divisors = this.levelDivisors[this.currentLevel];
+            
             if (edgeCurrency > 0) {
                 const greenWeight = weights.g || 1.0;
-                const currencyAwarded = Math.floor((edgeCurrency / 8) * greenWeight);
+                const currencyAwarded = Math.floor((edgeCurrency / divisors.monochrome) * greenWeight);
                 
                 if (currencyAwarded > 0) {
                     this.currencySystem.add('monochrome', currencyAwarded);
@@ -3183,9 +3198,12 @@ export class DefogGame extends Phaser.Scene {
         graphicsB.destroy();
         graphicsMono.destroy();
         
+        // Get level-specific divisors for resource balance
+        const divisors = this.levelDivisors[this.currentLevel];
+        
         // v0.04: Color insects also award monochrome rhodopsin
         if (edgeCurrency > 0) {
-            const monoAwarded = Math.floor(edgeCurrency / 8);
+            const monoAwarded = Math.floor(edgeCurrency / divisors.monochrome);
             if (monoAwarded > 0) {
                 this.currencySystem.add('monochrome', monoAwarded);
             }
@@ -3194,21 +3212,21 @@ export class DefogGame extends Phaser.Scene {
         if (this.greenCurrencyUnlocked) {
             if (edgeCurrencyGreen > 0) {
                 const greenWeight = weights.g || 1.0;
-                const greenAwarded = Math.floor((edgeCurrencyGreen / 30) * greenWeight);
+                const greenAwarded = Math.floor((edgeCurrencyGreen / divisors.green) * greenWeight);
                 if (greenAwarded > 0) {
                     this.currencySystem.add('green', greenAwarded);
                 }
             }
             if (edgeCurrencyRed > 0) {
                 const redWeight = weights.r || 1.0;
-                const redAwarded = Math.floor((edgeCurrencyRed / 34) * redWeight);
+                const redAwarded = Math.floor((edgeCurrencyRed / divisors.red) * redWeight);
                 if (redAwarded > 0) {
                     this.currencySystem.add('red', redAwarded);
                 }
             }
             if (edgeCurrencyBlue > 0) {
                 const blueWeight = weights.b || 1.0;
-                const blueAwarded = Math.floor((edgeCurrencyBlue / 26) * blueWeight);
+                const blueAwarded = Math.floor((edgeCurrencyBlue / divisors.blue) * blueWeight);
                 if (blueAwarded > 0) {
                     this.currencySystem.add('blue', blueAwarded);
                 }
