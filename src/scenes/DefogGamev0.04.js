@@ -4637,7 +4637,8 @@ export class DefogGame extends Phaser.Scene {
                 console.log(`📊 Player rank calculation for Level ${level}:`);
                 console.log(`   Player: ${playerName} - ${this.formatTime(playerScore.time)}`);
                 console.log(`   Rank: ${playerRank} out of ${allScores.length} total`);
-                console.log(`   Top 3 scores:`, allScores.slice(0, 3).map(s => `${s.playerName} (${this.formatTime(s.time)})`));
+                console.log(`   Player score object:`, playerScore);
+                console.log(`   Top 3 scores:`, allScores.slice(0, 3).map(s => `${s.playerName} (${this.formatTime(s.time)}) [isLocal: ${s.isLocal}]`));
                 
                 // Display top 3 scores (which now includes player if in top 3)
                 const topScores = allScores.slice(0, 3);
@@ -4646,7 +4647,11 @@ export class DefogGame extends Phaser.Scene {
                     const timeStr = this.formatTime(score.time);
                     const rank = index + 1;
                     const rankColor = index === 0 ? '#ffdd00' : (index === 1 ? '#dddddd' : '#cc8844');
-                    const isPlayer = (score.playerName === playerName && score.isLocal);
+                    
+                    // Check if this is the player's score
+                    const isPlayer = (score.playerName === playerName && score.isLocal === true);
+                    
+                    console.log(`   Displaying rank ${rank}: ${score.playerName}, isLocal=${score.isLocal}, isPlayer=${isPlayer}`);
                     
                     const scoreText = `${rank}. ⏱️${timeStr}  ${score.diamonds}💎 - ${score.playerName}${isPlayer ? ' (you)' : ''}`;
                     
