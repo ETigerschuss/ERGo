@@ -2576,16 +2576,16 @@ export class DefogGame extends Phaser.Scene {
         if (!this.updateFrameCounter) this.updateFrameCounter = 0;
         this.updateFrameCounter++;
         
-        // PERFORMANCE: More aggressive frame skipping based on insect count
+        // PERFORMANCE: AGGRESSIVE frame skipping based on insect count (kicks in at 5 insects)
         const insectCount = this.insects.length;
         let skipDefogFrame = false;
         
-        if (insectCount > 40) {
-            skipDefogFrame = this.updateFrameCounter % 4 !== 0; // Skip 3/4 frames
-        } else if (insectCount > 30) {
-            skipDefogFrame = this.updateFrameCounter % 3 !== 0; // Skip 2/3 frames
-        } else if (insectCount > 20) {
-            skipDefogFrame = this.updateFrameCounter % 2 === 0; // Skip 1/2 frames
+        if (insectCount >= 15) {
+            skipDefogFrame = this.updateFrameCounter % 5 !== 0; // Skip 4/5 frames (80% skip)
+        } else if (insectCount >= 10) {
+            skipDefogFrame = this.updateFrameCounter % 4 !== 0; // Skip 3/4 frames (75% skip)
+        } else if (insectCount >= 5) {
+            skipDefogFrame = this.updateFrameCounter % 2 === 0; // Skip 1/2 frames (50% skip)
         }
         
         // Update timer display
@@ -4495,14 +4495,27 @@ export class DefogGame extends Phaser.Scene {
         let playerName = localStorage.getItem('playerName') || '';
         
         if (!playerName) {
+            console.log('🎯 No player name found - showing input dialog');
             // Show name input dialog
             playerName = await this.showNameInputDialog();
+            
+            if (!playerName || playerName === null) {
+                console.log('⚠️ Dialog returned null/empty - trying browser prompt as fallback');
+                // Fallback to browser prompt if custom dialog failed
+                playerName = prompt('Enter your name for the leaderboard:', '');
+            }
+            
             if (playerName) {
+                playerName = playerName.trim();
                 localStorage.setItem('playerName', playerName);
+                console.log(`✅ Saved player name: ${playerName}`);
             } else {
                 playerName = 'Anonymous'; // Default if user cancels
                 localStorage.setItem('playerName', playerName);
+                console.log(`ℹ️ Using default name: ${playerName}`);
             }
+        } else {
+            console.log(`✅ Using saved player name: ${playerName}`);
         }
         
         // Create overlay
@@ -4723,6 +4736,8 @@ export class DefogGame extends Phaser.Scene {
             const width = this.scale.width;
             const height = this.scale.height;
             
+            console.log('🎯 Opening name input dialog...');
+            
             // Create input overlay
             const inputOverlay = this.add.rectangle(0, 0, width * 2, height * 2, 0x000000, 0.85)
                 .setOrigin(0).setDepth(12000).setScrollFactor(0).setInteractive();
@@ -4742,33 +4757,48 @@ export class DefogGame extends Phaser.Scene {
                 fontFamily: 'Arial'
             }).setOrigin(0.5).setDepth(12002).setScrollFactor(0);
             
+            // Subtitle
+            const subtitleText = this.add.text(width / 2, height / 2 - 50, '(Press Enter or click OK)', {
+                fontSize: '14px',
+                color: '#88ff88',
+                fontFamily: 'Arial'
+            }).setOrigin(0.5).setDepth(12002).setScrollFactor(0);
+            
             // HTML Input (using DOM)
             const inputElement = document.createElement('input');
             inputElement.type = 'text';
             inputElement.maxLength = '20';
             inputElement.placeholder = 'Your name...';
-            inputElement.style.position = 'absolute';
+            inputElement.value = '';
+            inputElement.style.position = 'fixed';
             inputElement.style.width = '300px';
             inputElement.style.height = '40px';
             inputElement.style.fontSize = '18px';
             inputElement.style.padding = '10px';
-            inputElement.style.left = Math.floor(window.innerWidth / 2 - 150) + 'px';
-            inputElement.style.top = Math.floor(window.innerHeight / 2 - 20) + 'px';
-            inputElement.style.zIndex = '10000';
+            inputElement.style.left = (window.innerWidth / 2 - 150) + 'px';
+            inputElement.style.top = (window.innerHeight / 2 - 20) + 'px';
+            inputElement.style.zIndex = '10001';
             inputElement.style.border = '2px solid #00ff00';
             inputElement.style.backgroundColor = '#111111';
             inputElement.style.color = '#00ff00';
             inputElement.style.fontFamily = 'Arial';
+            inputElement.style.outline = 'none';
             document.body.appendChild(inputElement);
-            inputElement.focus();
+            
+            // Wait a frame then focus
+            setTimeout(() => {
+                inputElement.focus();
+                inputElement.select();
+                console.log('✅ Input focused and selected');
+            }, 100);
             
             // OK button
-            const okBtn = this.add.rectangle(width / 2 - 100, height / 2 + 40, 180, 50, 0x00aa00, 1)
+            const okBtn = this.add.rectangle(width / 2 - 120, height / 2 + 50, 200, 50, 0x00aa00, 1)
                 .setDepth(12001).setScrollFactor(0)
                 .setInteractive({ useHandCursor: true })
                 .setStrokeStyle(2, 0x00ff00);
             
-            const okText = this.add.text(width / 2 - 100, height / 2 + 40, 'OK', {
+            const okText = this.add.text(width / 2 - 120, height / 2 + 50, 'OK', {
                 fontSize: '20px',
                 color: '#ffffff',
                 fontStyle: 'bold',
@@ -4776,36 +4806,49 @@ export class DefogGame extends Phaser.Scene {
             }).setOrigin(0.5).setDepth(12002).setScrollFactor(0);
             
             // Cancel button
-            const cancelBtn = this.add.rectangle(width / 2 + 100, height / 2 + 40, 180, 50, 0xaa0000, 1)
+            const cancelBtn = this.add.rectangle(width / 2 + 120, height / 2 + 50, 200, 50, 0xaa0000, 1)
                 .setDepth(12001).setScrollFactor(0)
                 .setInteractive({ useHandCursor: true })
                 .setStrokeStyle(2, 0xff0000);
             
-            const cancelText = this.add.text(width / 2 + 100, height / 2 + 40, 'Cancel', {
+            const cancelText = this.add.text(width / 2 + 120, height / 2 + 50, 'Cancel', {
                 fontSize: '20px',
                 color: '#ffffff',
                 fontStyle: 'bold',
                 fontFamily: 'Arial'
             }).setOrigin(0.5).setDepth(12002).setScrollFactor(0);
             
+            let resolved = false;
+            
             const cleanupDialog = () => {
+                if (resolved) return; // Prevent double-cleanup
+                resolved = true;
                 inputOverlay.destroy();
                 dialogBg.destroy();
                 titleText.destroy();
+                subtitleText.destroy();
                 okBtn.destroy();
                 okText.destroy();
                 cancelBtn.destroy();
                 cancelText.destroy();
-                document.body.removeChild(inputElement);
+                if (inputElement.parentNode) {
+                    document.body.removeChild(inputElement);
+                }
             };
             
-            okBtn.on('pointerdown', () => {
+            const handleSubmit = () => {
+                if (resolved) return;
                 const name = inputElement.value.trim() || 'Anonymous';
+                console.log(`✅ Name submitted: ${name}`);
                 cleanupDialog();
                 resolve(name);
-            });
+            };
+            
+            okBtn.on('pointerdown', handleSubmit);
             
             cancelBtn.on('pointerdown', () => {
+                if (resolved) return;
+                console.log('❌ Name input cancelled');
                 cleanupDialog();
                 resolve(null);
             });
@@ -4813,9 +4856,14 @@ export class DefogGame extends Phaser.Scene {
             // Allow Enter key to submit
             inputElement.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
-                    const name = inputElement.value.trim() || 'Anonymous';
-                    cleanupDialog();
-                    resolve(name);
+                    handleSubmit();
+                }
+            });
+            
+            // Prevent Escape key from closing
+            inputElement.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
                 }
             });
             
