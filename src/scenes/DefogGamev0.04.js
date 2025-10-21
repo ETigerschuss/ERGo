@@ -163,15 +163,16 @@ export class DefogGame extends Phaser.Scene {
         this.timerStopped = false;
         this.finalTime = 0;
         
-        // Level-specific divisors for resource balance
-        // Level 1 (baseline): divisors = {mono: 8, green: 30, red: 34, blue: 26}
-        // Levels 2-5 have MORE resources, so divisors INCREASE to maintain difficulty
+        // Level-specific divisors for resource balance (based on ACTUAL PIXEL COUNT)
+        // Pixel counts: L1=809,600 | L2=1,025,762 (×1.267) | L3=1,000,620 (×1.236) | L4/5=811,014 (×1.002)
+        // Formula: divisor = baseDivisor × (pixelsLevel1 / pixelsLevelN)
+        // More pixels = HIGHER divisor = harder to earn (maintains difficulty)
         this.levelDivisors = {
-            1: { monochrome: 8, green: 30, red: 34, blue: 26 },    // Baseline - most scarce
-            2: { monochrome: 8, green: 36, red: 41, blue: 31 },    // ~20% more resources
-            3: { monochrome: 8, green: 42, red: 48, blue: 37 },    // ~40% more resources
-            4: { monochrome: 8, green: 48, red: 55, blue: 43 },    // ~60% more resources
-            5: { monochrome: 8, green: 54, red: 62, blue: 49 }     // ~80% more resources
+            1: { monochrome: 8, green: 30, red: 34, blue: 26 },      // Baseline (809,600 pixels)
+            2: { monochrome: 10, green: 38, red: 43, blue: 33 },     // Highest divisors (1,025,762 pixels - 26.7% more)
+            3: { monochrome: 10, green: 37, red: 42, blue: 32 },     // High divisors (1,000,620 pixels - 23.6% more)
+            4: { monochrome: 8, green: 30, red: 34, blue: 26 },      // Nearly same (811,014 pixels - 0.2% more)
+            5: { monochrome: 8, green: 30, red: 34, blue: 26 }       // Nearly same (811,014 pixels - 0.2% more)
         };
         
         // High score system - load from localStorage
@@ -4537,49 +4538,50 @@ export class DefogGame extends Phaser.Scene {
                 fontFamily: 'Arial'
             }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
             
-            // Get scores for this level
-            const levelScores = usingFirebase ? allLevelScores[level] : [];
+            // Get scores for this level - merge local + global
+            let levelScores = [];
+            
+            // ALWAYS show local score first if it exists (even with Firebase)
+            const localScore = this.highScores.levels[level];
+            if (localScore) {
+                levelScores.push({
+                    time: localScore.time,
+                    diamonds: localScore.diamonds,
+                    isLocal: true
+                });
+            }
+            
+            // Then add global scores (if Firebase is available)
+            if (usingFirebase && allLevelScores[level]) {
+                const globalScores = allLevelScores[level].map(s => ({
+                    time: s.time,
+                    diamonds: s.diamonds,
+                    isLocal: false
+                }));
+                levelScores = levelScores.concat(globalScores);
+            }
             
             if (levelScores && levelScores.length > 0) {
-                // Display top 5 scores
-                levelScores.forEach((score, index) => {
+                // Display scores (mix of local + global)
+                levelScores.slice(0, 5).forEach((score, index) => {
                     const scoreY = yPos + 28 + (index * 12);
                     const timeStr = this.formatTime(score.time);
                     const rank = index + 1;
                     const rankColor = index === 0 ? '#ffdd00' : (index === 1 ? '#dddddd' : (index === 2 ? '#cc8844' : '#999999'));
                     
-                    // Rank + Time + Diamonds
-                    const scoreText = `${rank}. ⏱️${timeStr}  ${score.diamonds}💎`;
+                    // Add "(you)" indicator for local scores
+                    const youLabel = score.isLocal ? ' (you)' : '';
+                    const scoreText = `${rank}. ⏱️${timeStr}  ${score.diamonds}💎${youLabel}`;
+                    
                     this.add.text(width / 2 - 380, scoreY, scoreText, {
                         fontSize: '14px',
                         color: rankColor,
                         fontFamily: 'Arial'
                     }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
                 });
-            } else if (!usingFirebase) {
-                // Show local score
-                const localScore = this.highScores.levels[level];
-                if (localScore) {
-                    const scoreY = yPos + 28;
-                    const timeStr = this.formatTime(localScore.time);
-                    const scoreText = `⏱️${timeStr}  ${localScore.diamonds}💎  (your best)`;
-                    this.add.text(width / 2 - 380, scoreY, scoreText, {
-                        fontSize: '14px',
-                        color: '#00ff00',
-                        fontFamily: 'Arial'
-                    }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
-                } else {
-                    const scoreY = yPos + 28;
-                    this.add.text(width / 2 - 380, scoreY, '— Not completed yet —', {
-                        fontSize: '14px',
-                        color: '#666666',
-                        fontStyle: 'italic',
-                        fontFamily: 'Arial'
-                    }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
-                }
             } else {
                 const scoreY = yPos + 28;
-                this.add.text(width / 2 - 380, scoreY, '— No scores yet —', {
+                this.add.text(width / 2 - 380, scoreY, '— Not completed yet —', {
                     fontSize: '14px',
                     color: '#666666',
                     fontStyle: 'italic',
@@ -4770,8 +4772,9 @@ export class DefogGame extends Phaser.Scene {
             this.saveHighScores();
             console.log(`🏆 NEW BEST TIME for Level ${level}: ${this.formatTime(time)}, ${diamonds}💎`);
             
-            // Upload to global leaderboard (Firebase)
-            this.uploadScoreToFirebase(level, time, diamonds, rhodopsins);
+            // Upload to global leaderboard (Firebase) - don't wait, fire and forget
+            this.uploadScoreToFirebase(level, time, diamonds, rhodopsins)
+                .catch(err => console.error('Error uploading to Firebase:', err));
         }
         
         return isNewBest;
@@ -4782,29 +4785,44 @@ export class DefogGame extends Phaser.Scene {
     async uploadScoreToFirebase(level, time, diamonds, rhodopsins) {
         // Check if Firebase is available
         if (!window.firebaseInitialized || !window.firebaseDB) {
-            console.log('⚠️ Firebase not available, score saved locally only');
+            console.warn('⚠️ Firebase not initialized:', {
+                firebaseInitialized: window.firebaseInitialized,
+                hasDB: !!window.firebaseDB
+            });
             return;
         }
         
         try {
             const db = window.firebaseDB;
             
+            console.log(`📤 Uploading score to Firebase - Level ${level}: ${this.formatTime(time)}, ${diamonds}💎`);
+            
             // Upload score to Firestore
-            await db.collection('leaderboard').add({
+            const result = await db.collection('leaderboard').add({
                 level: level,
                 time: time,
                 diamonds: diamonds,
                 rhodopsins: rhodopsins,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp(),
                 dateStr: new Date().toLocaleDateString(),
-                playerName: 'Anonymous', // Could add player name input later
+                timeZone: new Date().toString(),
+                playerName: 'Anonymous',
                 version: '0.04'
             });
             
-            console.log(`✅ Score uploaded to global leaderboard! Level ${level}: ${this.formatTime(time)}, ${diamonds}💎`);
+            console.log(`✅ Score uploaded to global leaderboard! Level ${level}: ${this.formatTime(time)}, ${diamonds}💎 (Doc ID: ${result.id})`);
+            return result;
         } catch (error) {
             console.error('❌ Failed to upload score to Firebase:', error);
+            console.error('Error details:', {
+                code: error.code,
+                message: error.message,
+                level: level,
+                time: time,
+                diamonds: diamonds
+            });
             // Game continues normally, just no global score
+            throw error;
         }
     }
     
