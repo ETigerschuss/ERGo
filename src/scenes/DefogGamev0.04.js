@@ -2597,19 +2597,31 @@ export class DefogGame extends Phaser.Scene {
             this.collectibleSystem.checkCollection(this.insects);
         }
         
-        // Clean up activeSpecies Set and activeFamilies Map every 60 frames
-        if (this.updateFrameCounter % 60 === 0) {
-            const activeSpeciesIds = new Set(this.insects.map(i => i.insectId)); // Changed from speciesId to insectId
+        // Clean up activeSpecies Set and activeFamilies Map every 30 frames (more responsive)
+        if (this.updateFrameCounter % 30 === 0) {
+            const activeSpeciesIds = new Set(this.insects.map(i => i.insectId));
+            const activeFamiliesSet = new Set(); // Track which families still have active insects
+            
             for (const speciesId of this.activeSpecies) {
                 if (!activeSpeciesIds.has(speciesId)) {
                     this.activeSpecies.delete(speciesId);
-                    const speciesData = INSECT_DATABASE[speciesId];
-                    if (speciesData) {
-                        const family = speciesData.superfamily;
-                        this.activeFamilies.delete(family);
-                        console.log(`🔓 Cleaned up ${speciesId} from activeSpecies and freed family ${family}`);
-                    }
+                    console.log(`🔓 Cleaned up ${speciesId} from activeSpecies`);
                     this.updateSpeciesBoxHighlights();
+                }
+            }
+            
+            // Rebuild activeFamilies based on current insects (more reliable)
+            for (const insect of this.insects) {
+                if (!insect.isDead) {
+                    activeFamiliesSet.add(insect.superfamily);
+                }
+            }
+            
+            // Only clear families that no longer have any insects
+            for (const family of this.activeFamilies.keys()) {
+                if (!activeFamiliesSet.has(family)) {
+                    this.activeFamilies.delete(family);
+                    console.log(`🔓 Family ${family} is now completely FREE`);
                 }
             }
         }
