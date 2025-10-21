@@ -4771,11 +4771,12 @@ export class DefogGame extends Phaser.Scene {
             };
             this.saveHighScores();
             console.log(`🏆 NEW BEST TIME for Level ${level}: ${this.formatTime(time)}, ${diamonds}💎`);
-            
-            // Upload to global leaderboard (Firebase) - don't wait, fire and forget
-            this.uploadScoreToFirebase(level, time, diamonds, rhodopsins)
-                .catch(err => console.error('Error uploading to Firebase:', err));
         }
+        
+        // ALWAYS upload to global leaderboard - every completion counts!
+        // v0.04: Firebase now accepts all scores, not just personal bests
+        this.uploadScoreToFirebase(level, time, diamonds, rhodopsins)
+            .catch(err => console.error('Error uploading to Firebase:', err));
         
         return isNewBest;
     }
