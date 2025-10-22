@@ -3636,13 +3636,8 @@ export class DefogGame extends Phaser.Scene {
         
         this.finishLevelButton.on('pointerdown', () => {
             console.log(`📍 "Finish Level" button clicked!`);
-            // Now trigger the leaderboard flow: name → rank → display → submit
-            this.collectPlayerNameThenSaveScore(
-                this.currentLevel,
-                this.finalTime,
-                this.finalDiamondScore,
-                this.finalRhodopsins
-            );
+            // Show diamond reward screen with "Next Level" and "Highscores" buttons
+            this.showDiamondRewardScreen();
         });
         
         this.finishLevelButton.on('pointerover', () => {
@@ -4514,9 +4509,9 @@ export class DefogGame extends Phaser.Scene {
         const width = this.scale.width;
         const height = this.scale.height;
         
-        // Create semi-transparent overlay
+        // Create semi-transparent overlay - VERY HIGH DEPTH to be in front of diamond screen
         const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
-        overlay.setDepth(1000);
+        overlay.setDepth(15000);
         
         // Title
         const title = this.add.text(width / 2, 100, `LEVEL ${level} COMPLETE!`, {
@@ -4528,7 +4523,7 @@ export class DefogGame extends Phaser.Scene {
             strokeThickness: 4
         });
         title.setOrigin(0.5);
-        title.setDepth(1001);
+        title.setDepth(15001);
         
         // Subtitle with rank
         const rankColor = playerRank === 1 ? '#FFD700' : playerRank === 2 ? '#C0C0C0' : playerRank === 3 ? '#CD7F32' : '#00ff88';
@@ -4541,7 +4536,7 @@ export class DefogGame extends Phaser.Scene {
             strokeThickness: 3
         });
         subtitle.setOrigin(0.5);
-        subtitle.setDepth(1001);
+        subtitle.setDepth(15001);
         
         // Display top 3 scores
         let yPos = 230;
@@ -4558,7 +4553,7 @@ export class DefogGame extends Phaser.Scene {
             // Background highlight for player
             if (isPlayer) {
                 const bg = this.add.rectangle(width / 2, yPos, width * 0.8, 50, 0x00ff88, 0.3);
-                bg.setDepth(1000);
+                bg.setDepth(15000);
             }
             
             // Display: #1 PlayerName - 3:45 (2500💎)
@@ -4573,7 +4568,7 @@ export class DefogGame extends Phaser.Scene {
                 strokeThickness: 2
             });
             text.setOrigin(0.5);
-            text.setDepth(1001);
+            text.setDepth(15001);
             
             yPos += 60;
         });
@@ -4584,7 +4579,7 @@ export class DefogGame extends Phaser.Scene {
             
             // Highlight background
             const bg = this.add.rectangle(width / 2, yPos, width * 0.8, 50, 0x00ff88, 0.3);
-            bg.setDepth(1000);
+            bg.setDepth(15000);
             
             const text = this.add.text(width / 2, yPos, 
                 `#${playerRank}  ${playerScore.playerName} (you) - ${this.formatTime(playerScore.time)} (${playerScore.diamonds}💎)`, {
@@ -4596,7 +4591,7 @@ export class DefogGame extends Phaser.Scene {
                 strokeThickness: 2
             });
             text.setOrigin(0.5);
-            text.setDepth(1001);
+            text.setDepth(15001);
         }
         
         // Close button
@@ -4609,7 +4604,7 @@ export class DefogGame extends Phaser.Scene {
             padding: { x: 30, y: 15 }
         });
         closeButton.setOrigin(0.5);
-        closeButton.setDepth(1001);
+        closeButton.setDepth(15001);
         closeButton.setInteractive({ useHandCursor: true });
         
         closeButton.on('pointerover', () => {
@@ -4629,7 +4624,7 @@ export class DefogGame extends Phaser.Scene {
             
             // Destroy all score texts and backgrounds
             this.children.list.forEach(child => {
-                if (child.depth === 1000 || child.depth === 1001) {
+                if (child.depth === 15000 || child.depth === 15001) {
                     child.destroy();
                 }
             });
@@ -4656,264 +4651,14 @@ export class DefogGame extends Phaser.Scene {
     }
     
     async showHighscores() {
-        const width = this.scale.width;
-        const height = this.scale.height;
-        
-        // First, prompt for player name if not set
-        let playerName = localStorage.getItem('playerName') || '';
-        
-        if (!playerName) {
-            console.log('🎯 No player name found - showing input dialog');
-            // Show name input dialog
-            playerName = await this.showNameInputDialog();
-            
-            if (!playerName || playerName === null) {
-                console.log('⚠️ Dialog returned null/empty - trying browser prompt as fallback');
-                // Fallback to browser prompt if custom dialog failed
-                playerName = prompt('Enter your name for the leaderboard:', '');
-            }
-            
-            if (playerName) {
-                playerName = playerName.trim();
-                localStorage.setItem('playerName', playerName);
-                console.log(`✅ Saved player name: ${playerName}`);
-            } else {
-                playerName = 'Anonymous'; // Default if user cancels
-                localStorage.setItem('playerName', playerName);
-                console.log(`ℹ️ Using default name: ${playerName}`);
-            }
-        } else {
-            console.log(`✅ Using saved player name: ${playerName}`);
-        }
-        
-        // Create overlay
-        const overlay = this.add.rectangle(0, 0, width * 2, height * 2, 0x000000, 0.95)
-            .setOrigin(0).setDepth(11000).setScrollFactor(0).setInteractive();
-        
-        // Title
-        const usingFirebase = window.firebaseInitialized;
-        const titleText = usingFirebase ? '🎯 GLOBAL LEADERBOARD 🌐' : '🏆 YOUR BEST SCORES 🏆';
-        const title = this.add.text(width / 2, 40, titleText, {
-            fontSize: '36px',
-            color: '#ffaa00',
-            fontStyle: 'bold',
-            fontFamily: 'Arial'
-        }).setOrigin(0.5).setDepth(11001).setScrollFactor(0);
-        
-        // Show player name
-        const playerNameText = this.add.text(width / 2, 70, `Player: ${playerName}`, {
-            fontSize: '16px',
-            color: '#88ff88',
-            fontFamily: 'Arial'
-        }).setOrigin(0.5).setDepth(11001).setScrollFactor(0);
-        
-        // Loading message
-        const loadingText = this.add.text(width / 2, height / 2, 'Loading scores...', {
-            fontSize: '24px',
-            color: '#ffffff',
-            fontFamily: 'Arial'
-        }).setOrigin(0.5).setDepth(11001).setScrollFactor(0);
-        
-        // Load global scores for all 5 levels
-        const allLevelScores = {};
-        if (usingFirebase) {
-            try {
-                for (let level = 1; level <= 5; level++) {
-                    allLevelScores[level] = await this.loadGlobalLeaderboard(level);
-                }
-            } catch (error) {
-                console.error('Error loading leaderboard:', error);
-            }
-        }
-        
-        // Remove loading text
-        loadingText.destroy();
-        
-        // Display top 3 per level, plus player position if not in top 3
-        let startY = 115;
-        const levelSpacing = 110;
-        
-        for (let level = 1; level <= 5; level++) {
-            const yPos = startY + ((level - 1) * levelSpacing);
-            
-            // Level header
-            this.add.text(width / 2 - 380, yPos, `Level ${level}`, {
-                fontSize: '24px',
-                color: '#ffdd00',
-                fontStyle: 'bold',
-                fontFamily: 'Arial'
-            }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
-            
-            // Get scores for this level - merge local + global
-            let allScores = [];
-            
-            // Get local score
-            const localScore = this.highScores.levels[level];
-            let playerScore = null;
-            let playerScoreIndex = -1; // Track which score is the player's
-            
-            if (localScore) {
-                playerScore = {
-                    time: localScore.time,
-                    diamonds: localScore.diamonds,
-                    playerName: playerName,
-                    isLocal: true
-                };
-            }
-            
-            // Get global scores (if Firebase is available)
-            if (usingFirebase && allLevelScores[level]) {
-                const globalScores = allLevelScores[level].map(s => ({
-                    time: s.time,
-                    diamonds: s.diamonds,
-                    playerName: s.playerName || 'Anonymous',
-                    isLocal: false
-                }));
-                allScores = globalScores;
-            }
-            
-            if (playerScore) {
-                // ALWAYS include player's local score in the ranking
-                // Sort all scores by time to find player's rank
-                allScores.sort((a, b) => a.time - b.time);
-                
-                // Find where player's score would be inserted
-                playerScoreIndex = allScores.findIndex(s => playerScore.time < s.time);
-                
-                // If player score is not faster than any existing score, it goes at the end
-                if (playerScoreIndex === -1) {
-                    playerScoreIndex = allScores.length;
-                }
-                
-                // INSERT player's score into the allScores array at the correct position
-                allScores.splice(playerScoreIndex, 0, playerScore);
-                
-                // Player's rank is 1-indexed position in the list
-                const playerRank = playerScoreIndex + 1;
-                
-                console.log(`📊 Player rank calculation for Level ${level}:`);
-                console.log(`   Player: ${playerName} - ${this.formatTime(playerScore.time)}`);
-                console.log(`   Rank: ${playerRank} out of ${allScores.length} total`);
-                console.log(`   Player score object:`, playerScore);
-                console.log(`   Top 3 scores:`, allScores.slice(0, 3).map(s => `${s.playerName} (${this.formatTime(s.time)}) [isLocal: ${s.isLocal}]`));
-                
-                // Display top 3 scores (which now includes player if in top 3)
-                const topScores = allScores.slice(0, 3);
-                topScores.forEach((score, index) => {
-                    const scoreY = yPos + 28 + (index * 12);
-                    const timeStr = this.formatTime(score.time);
-                    const rank = index + 1;
-                    const rankColor = index === 0 ? '#ffdd00' : (index === 1 ? '#dddddd' : '#cc8844');
-                    
-                    // Check if this is the player's score
-                    const isPlayer = (score.playerName === playerName && score.isLocal === true);
-                    
-                    console.log(`   Displaying rank ${rank}: ${score.playerName}, isLocal=${score.isLocal}, isPlayer=${isPlayer}`);
-                    
-                    const scoreText = `${rank}. ⏱️${timeStr}  ${score.diamonds}💎 - ${score.playerName}${isPlayer ? ' (you)' : ''}`;
-                    
-                    this.add.text(width / 2 - 380, scoreY, scoreText, {
-                        fontSize: '14px',
-                        color: rankColor,
-                        fontFamily: 'Arial',
-                        fontStyle: isPlayer ? 'bold' : 'normal',
-                        backgroundColor: isPlayer ? '#1a1a00' : undefined,
-                        padding: isPlayer ? { x: 4, y: 2 } : undefined
-                    }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
-                });
-                
-                // If player is not in top 3, show their position in 4th row
-                if (playerRank > 3) {
-                    const scoreY = yPos + 28 + (3 * 12);
-                    const timeStr = this.formatTime(playerScore.time);
-                    const scoreText = `${playerRank}. ⏱️${timeStr}  ${playerScore.diamonds}💎 - ${playerName} (you)`;
-                    
-                    this.add.text(width / 2 - 380, scoreY, scoreText, {
-                        fontSize: '14px',
-                        color: '#00ff00',
-                        fontFamily: 'Arial',
-                        fontStyle: 'bold',
-                        backgroundColor: '#1a1a00',
-                        padding: { x: 4, y: 2 }
-                    }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
-                }
-            } else {
-                // No local score for this level, show top 3 global only
-                const topScores = allScores.slice(0, 3);
-                if (topScores.length > 0) {
-                    topScores.forEach((score, index) => {
-                        const scoreY = yPos + 28 + (index * 12);
-                        const timeStr = this.formatTime(score.time);
-                        const rank = index + 1;
-                        const rankColor = index === 0 ? '#ffdd00' : (index === 1 ? '#dddddd' : '#cc8844');
-                        const scoreText = `${rank}. ⏱️${timeStr}  ${score.diamonds}💎 - ${score.playerName}`;
-                        
-                        this.add.text(width / 2 - 380, scoreY, scoreText, {
-                            fontSize: '14px',
-                            color: rankColor,
-                            fontFamily: 'Arial'
-                        }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
-                    });
-                } else {
-                    const scoreY = yPos + 28;
-                    this.add.text(width / 2 - 380, scoreY, '— Not completed yet —', {
-                        fontSize: '14px',
-                        color: '#666666',
-                        fontStyle: 'italic',
-                        fontFamily: 'Arial'
-                    }).setOrigin(0, 0).setDepth(11001).setScrollFactor(0);
-                }
-            }
-        }
-        
-        // Close button
-        const closeButton = this.add.rectangle(width / 2, height - 80, 200, 50, 0xaa3333, 1)
-            .setOrigin(0.5)
-            .setDepth(11001)
-            .setScrollFactor(0)
-            .setInteractive({ useHandCursor: true });
-        
-        const closeText = this.add.text(width / 2, height - 80, 'Close', {
-            fontSize: '24px',
-            color: '#ffffff',
-            fontStyle: 'bold',
-            fontFamily: 'Arial'
-        }).setOrigin(0.5).setDepth(11002).setScrollFactor(0);
-        
-        closeButton.on('pointerover', () => {
-            closeButton.setFillStyle(0xcc4444);
-        });
-        
-        closeButton.on('pointerout', () => {
-            closeButton.setFillStyle(0xaa3333);
-        });
-        
-        closeButton.on('pointerdown', () => {
-            // Destroy all highscore UI elements
-            const allObjects = this.children.list.filter(obj => 
-                obj.depth >= 11000 && obj.depth <= 11002
-            );
-            allObjects.forEach(obj => {
-                if (obj && obj.scene) obj.destroy();
-            });
-        });
-        
-        // Animate in
-        const allHighscoreObjects = this.children.list.filter(obj => 
-            obj.depth >= 11000 && obj.depth <= 11002
+        // Trigger the full leaderboard flow: name → download → rank → display → submit
+        console.log('📊 Highscores button clicked - starting leaderboard flow');
+        await this.collectPlayerNameThenSaveScore(
+            this.currentLevel,
+            this.finalTime,
+            this.finalDiamondScore,
+            this.finalRhodopsins
         );
-        
-        allHighscoreObjects.forEach(obj => {
-            if (obj !== overlay) {
-                obj.setAlpha(0);
-                this.tweens.add({
-                    targets: obj,
-                    alpha: 1,
-                    duration: 300,
-                    ease: 'Power2'
-                });
-            }
-        });
     }
 
     showNameInputDialog() {
