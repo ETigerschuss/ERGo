@@ -3635,7 +3635,14 @@ export class DefogGame extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(2002).setScrollFactor(0).setVisible(false);
         
         this.finishLevelButton.on('pointerdown', () => {
-            this.showDiamondRewardScreen();
+            console.log(`📍 "Finish Level" button clicked!`);
+            // Now trigger the leaderboard flow: name → rank → display → submit
+            this.collectPlayerNameThenSaveScore(
+                this.currentLevel,
+                this.finalTime,
+                this.finalDiamondScore,
+                this.finalRhodopsins
+            );
         });
         
         this.finishLevelButton.on('pointerover', () => {
@@ -3696,16 +3703,8 @@ export class DefogGame extends Phaser.Scene {
             console.log(`💎 Final diamond score: ${this.finalDiamondScore}`);
             console.log(`🧬 Final rhodopsins:`, this.finalRhodopsins);
             
-            // CRITICAL: Collect player name BEFORE uploading score to Firebase
-            // This ensures the score has the correct player name
-            console.log(`📞 About to call collectPlayerNameThenSaveScore...`);
-            this.collectPlayerNameThenSaveScore(
-                this.currentLevel,
-                this.finalTime,
-                this.finalDiamondScore,
-                this.finalRhodopsins
-            );
-            console.log(`✅ Called collectPlayerNameThenSaveScore (async, won't wait)`);
+            // DON'T show leaderboard yet - wait for user to click "Finish Level"
+            console.log(`✅ Level complete - waiting for user to click "Finish Level" button`);
             
             // Show finish level button
             this.finishLevelButton.setVisible(true);
@@ -4635,7 +4634,22 @@ export class DefogGame extends Phaser.Scene {
                 }
             });
             
-            console.log('✅ Leaderboard closed');
+            console.log('✅ Leaderboard closed - proceeding to next level');
+            
+            // Check if there's a next level
+            const nextLevel = this.currentLevel + 1;
+            const maxLevel = 5;
+            
+            if (nextLevel <= maxLevel) {
+                // Go to next level
+                console.log(`🚀 Loading Level ${nextLevel}...`);
+                this.registry.set('currentLevel', nextLevel);
+                this.scene.restart();
+            } else {
+                // All levels complete! Show final congratulations
+                console.log(`🎉 All levels complete!`);
+                this.showAllLevelsCompleteScreen();
+            }
         });
         
         console.log('✅ Leaderboard displayed');
