@@ -3680,25 +3680,32 @@ export class DefogGame extends Phaser.Scene {
         
         // Check if all level species are unlocked
         if (unlockedInLevel1 >= totalLevel1Species && !this.levelCompleted) {
+            console.log(`🎉 ============================================`);
             console.log(`🎉 LEVEL ${this.currentLevel} COMPLETE! All 16 species unlocked!`);
+            console.log(`🎉 ============================================`);
             this.levelCompleted = true;
             
             // Stop timer
             this.timerStopped = true;
             this.finalTime = Date.now() - this.levelStartTime;
+            console.log(`⏱️ Final time: ${this.finalTime}ms (${this.formatTime(this.finalTime)})`);
             
             // Capture rhodopsin values for diamond score
             this.finalRhodopsins = this.currencySystem.getCurrencies();
             this.finalDiamondScore = this.calculateDiamondScore(this.finalRhodopsins, this.finalTime);
+            console.log(`💎 Final diamond score: ${this.finalDiamondScore}`);
+            console.log(`🧬 Final rhodopsins:`, this.finalRhodopsins);
             
             // CRITICAL: Collect player name BEFORE uploading score to Firebase
             // This ensures the score has the correct player name
+            console.log(`📞 About to call collectPlayerNameThenSaveScore...`);
             this.collectPlayerNameThenSaveScore(
                 this.currentLevel,
                 this.finalTime,
                 this.finalDiamondScore,
                 this.finalRhodopsins
             );
+            console.log(`✅ Called collectPlayerNameThenSaveScore (async, won't wait)`);
             
             // Show finish level button
             this.finishLevelButton.setVisible(true);
@@ -5225,11 +5232,18 @@ export class DefogGame extends Phaser.Scene {
         // 4. Display leaderboard immediately with current run highlighted
         // 5. Submit to Firebase in background
         
+        console.log(`🚀 ============================================`);
+        console.log(`🚀 collectPlayerNameThenSaveScore CALLED!`);
+        console.log(`🚀 Level: ${level}, Time: ${time}ms, Diamonds: ${diamonds}`);
+        console.log(`🚀 ============================================`);
+        
         try {
             console.log(`🎯 Level ${level} completed - collecting name for leaderboard`);
+            console.log(`📝 About to show name input dialog...`);
             
             // STEP 1: ALWAYS ask for name
             let playerName = await this.showNameInputDialog();
+            console.log(`✅ Name dialog returned: ${playerName}`);
             
             if (!playerName || playerName === null) {
                 console.log('⚠️ Dialog returned null/empty - trying browser prompt as fallback');
