@@ -4498,6 +4498,142 @@ export class DefogGame extends Phaser.Scene {
         });
     }
     
+    displayLevelCompletionLeaderboard(level, allScores, playerScore, playerRank) {
+        // Display leaderboard immediately after level completion
+        // Shows: Top 3 scores + player position if outside top 3
+        // Highlights player's current run with "(you)" and green background
+        
+        console.log(`🏆 Displaying Level ${level} completion leaderboard`);
+        
+        const width = this.scale.width;
+        const height = this.scale.height;
+        
+        // Create semi-transparent overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
+        overlay.setDepth(1000);
+        
+        // Title
+        const title = this.add.text(width / 2, 100, `LEVEL ${level} COMPLETE!`, {
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: '48px',
+            fontStyle: 'bold',
+            color: '#00ff88',
+            stroke: '#000000',
+            strokeThickness: 4
+        });
+        title.setOrigin(0.5);
+        title.setDepth(1001);
+        
+        // Subtitle with rank
+        const rankColor = playerRank === 1 ? '#FFD700' : playerRank === 2 ? '#C0C0C0' : playerRank === 3 ? '#CD7F32' : '#00ff88';
+        const subtitle = this.add.text(width / 2, 160, `YOUR RANK: #${playerRank}`, {
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: '32px',
+            fontStyle: 'bold',
+            color: rankColor,
+            stroke: '#000000',
+            strokeThickness: 3
+        });
+        subtitle.setOrigin(0.5);
+        subtitle.setDepth(1001);
+        
+        // Display top 3 scores
+        let yPos = 230;
+        const topScores = allScores.slice(0, 3);
+        
+        topScores.forEach((score, index) => {
+            const rank = index + 1;
+            const isPlayer = score.isLocal === true;
+            
+            // Rank color
+            const colors = ['#FFD700', '#C0C0C0', '#CD7F32']; // Gold, Silver, Bronze
+            const color = colors[index];
+            
+            // Background highlight for player
+            if (isPlayer) {
+                const bg = this.add.rectangle(width / 2, yPos, width * 0.8, 50, 0x00ff88, 0.3);
+                bg.setDepth(1000);
+            }
+            
+            // Display: #1 PlayerName - 3:45 (2500💎)
+            const nameText = isPlayer ? `${score.playerName} (you)` : score.playerName;
+            const text = this.add.text(width / 2, yPos, 
+                `#${rank}  ${nameText} - ${this.formatTime(score.time)} (${score.diamonds}💎)`, {
+                fontFamily: 'Orbitron, sans-serif',
+                fontSize: '24px',
+                fontStyle: isPlayer ? 'bold' : 'normal',
+                color: isPlayer ? '#00ff88' : color,
+                stroke: '#000000',
+                strokeThickness: 2
+            });
+            text.setOrigin(0.5);
+            text.setDepth(1001);
+            
+            yPos += 60;
+        });
+        
+        // If player is outside top 3, show their position separately
+        if (playerRank > 3) {
+            yPos += 20; // Extra spacing
+            
+            // Highlight background
+            const bg = this.add.rectangle(width / 2, yPos, width * 0.8, 50, 0x00ff88, 0.3);
+            bg.setDepth(1000);
+            
+            const text = this.add.text(width / 2, yPos, 
+                `#${playerRank}  ${playerScore.playerName} (you) - ${this.formatTime(playerScore.time)} (${playerScore.diamonds}💎)`, {
+                fontFamily: 'Orbitron, sans-serif',
+                fontSize: '24px',
+                fontStyle: 'bold',
+                color: '#00ff88',
+                stroke: '#000000',
+                strokeThickness: 2
+            });
+            text.setOrigin(0.5);
+            text.setDepth(1001);
+        }
+        
+        // Close button
+        const closeButton = this.add.text(width / 2, height - 100, 'CONTINUE', {
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: '28px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            backgroundColor: '#00ff88',
+            padding: { x: 30, y: 15 }
+        });
+        closeButton.setOrigin(0.5);
+        closeButton.setDepth(1001);
+        closeButton.setInteractive({ useHandCursor: true });
+        
+        closeButton.on('pointerover', () => {
+            closeButton.setStyle({ backgroundColor: '#00cc66' });
+        });
+        
+        closeButton.on('pointerout', () => {
+            closeButton.setStyle({ backgroundColor: '#00ff88' });
+        });
+        
+        closeButton.on('pointerdown', () => {
+            // Clean up
+            overlay.destroy();
+            title.destroy();
+            subtitle.destroy();
+            closeButton.destroy();
+            
+            // Destroy all score texts and backgrounds
+            this.children.list.forEach(child => {
+                if (child.depth === 1000 || child.depth === 1001) {
+                    child.destroy();
+                }
+            });
+            
+            console.log('✅ Leaderboard closed');
+        });
+        
+        console.log('✅ Leaderboard displayed');
+    }
+    
     async showHighscores() {
         const width = this.scale.width;
         const height = this.scale.height;
@@ -5082,45 +5218,69 @@ export class DefogGame extends Phaser.Scene {
     }
     
     async collectPlayerNameThenSaveScore(level, time, diamonds, rhodopsins) {
-        // Collect player name FIRST, then save score with name attached
-        // This is called immediately when level completes, before showing any UI
+        // SIMPLIFIED FLOW per user request:
+        // 1. ALWAYS ask for name (no localStorage check)
+        // 2. Download current leaderboard for this level
+        // 3. Insert current run and calculate rank
+        // 4. Display leaderboard immediately with current run highlighted
+        // 5. Submit to Firebase in background
         
         try {
-            let playerName = localStorage.getItem('playerName') || '';
+            console.log(`🎯 Level ${level} completed - collecting name for leaderboard`);
             
-            if (!playerName) {
-                console.log('🎯 No player name found - collecting name for level completion');
-                // Show name input dialog
-                playerName = await this.showNameInputDialog();
-                
-                if (!playerName || playerName === null) {
-                    console.log('⚠️ Dialog returned null/empty - trying browser prompt as fallback');
-                    // Fallback to browser prompt if custom dialog failed
-                    playerName = prompt('Enter your name for the leaderboard:', '');
-                }
-                
-                if (playerName) {
-                    playerName = playerName.trim();
-                    localStorage.setItem('playerName', playerName);
-                    console.log(`✅ Saved player name: ${playerName}`);
-                } else {
-                    playerName = 'Anonymous'; // Default if user cancels
-                    localStorage.setItem('playerName', playerName);
-                    console.log(`ℹ️ Using default name: ${playerName}`);
-                }
-            } else {
-                console.log(`✅ Using existing player name: ${playerName}`);
+            // STEP 1: ALWAYS ask for name
+            let playerName = await this.showNameInputDialog();
+            
+            if (!playerName || playerName === null) {
+                console.log('⚠️ Dialog returned null/empty - trying browser prompt as fallback');
+                playerName = prompt('Enter your name for the leaderboard:', '');
             }
             
-            // NOW save the score with the name set
-            // Update high score for this level
-            const isNewBest = this.updateHighScore(level, time, diamonds, rhodopsins);
+            if (playerName) {
+                playerName = playerName.trim();
+                localStorage.setItem('playerName', playerName);
+                console.log(`✅ Collected player name: ${playerName}`);
+            } else {
+                playerName = 'Anonymous';
+                localStorage.setItem('playerName', playerName);
+                console.log(`ℹ️ Using default name: ${playerName}`);
+            }
             
-            console.log(`✅ Score saved with player name: ${playerName}`);
+            // STEP 2: Download leaderboard for this specific level
+            console.log(`📥 Downloading leaderboard for Level ${level}...`);
+            const levelScores = await this.loadGlobalLeaderboard(level);
+            console.log(`📊 Found ${levelScores.length} scores for Level ${level}`);
+            
+            // STEP 3: Create current run and insert into leaderboard
+            const playerScore = {
+                level: level,
+                time: time,
+                diamonds: diamonds,
+                rhodopsins: rhodopsins,
+                playerName: playerName,
+                isLocal: true, // Mark as current run
+                timestamp: new Date().toISOString()
+            };
+            
+            // Combine and sort all scores by time
+            const allScores = [...levelScores, playerScore].sort((a, b) => a.time - b.time);
+            
+            // Find player's rank (1-based)
+            const playerRank = allScores.findIndex(s => s.isLocal === true) + 1;
+            console.log(`🏆 Your rank: ${playerRank} out of ${allScores.length} total scores`);
+            
+            // STEP 4: Display leaderboard immediately
+            this.displayLevelCompletionLeaderboard(level, allScores, playerScore, playerRank);
+            
+            // STEP 5: Submit to Firebase in background (don't wait)
+            console.log(`📤 Submitting score to Firebase...`);
+            this.updateHighScore(level, time, diamonds, rhodopsins); // This calls uploadScoreToFirebase
+            
+            console.log(`✅ Leaderboard flow complete`);
             
         } catch (error) {
-            console.error('Error collecting player name:', error);
-            // Fall back to updating score anyway
+            console.error('Error in collectPlayerNameThenSaveScore:', error);
+            // Fallback: still save the score locally and to Firebase
             this.updateHighScore(level, time, diamonds, rhodopsins);
         }
     }
