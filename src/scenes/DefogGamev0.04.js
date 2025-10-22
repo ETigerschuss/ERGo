@@ -4509,9 +4509,9 @@ export class DefogGame extends Phaser.Scene {
         const width = this.scale.width;
         const height = this.scale.height;
         
-        // Create semi-transparent overlay - VERY HIGH DEPTH to be in front of diamond screen
+        // Create semi-transparent overlay - ULTRA HIGH DEPTH to be in front of EVERYTHING (including diamond screen)
         const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
-        overlay.setDepth(15000);
+        overlay.setDepth(20000);
         
         // Title
         const title = this.add.text(width / 2, 100, `LEVEL ${level} COMPLETE!`, {
@@ -4523,7 +4523,7 @@ export class DefogGame extends Phaser.Scene {
             strokeThickness: 4
         });
         title.setOrigin(0.5);
-        title.setDepth(15001);
+        title.setDepth(20001);
         
         // Subtitle with rank
         const rankColor = playerRank === 1 ? '#FFD700' : playerRank === 2 ? '#C0C0C0' : playerRank === 3 ? '#CD7F32' : '#00ff88';
@@ -4536,7 +4536,7 @@ export class DefogGame extends Phaser.Scene {
             strokeThickness: 3
         });
         subtitle.setOrigin(0.5);
-        subtitle.setDepth(15001);
+        subtitle.setDepth(20001);
         
         // Display top 3 scores
         let yPos = 230;
@@ -4553,7 +4553,7 @@ export class DefogGame extends Phaser.Scene {
             // Background highlight for player
             if (isPlayer) {
                 const bg = this.add.rectangle(width / 2, yPos, width * 0.8, 50, 0x00ff88, 0.3);
-                bg.setDepth(15000);
+                bg.setDepth(20000);
             }
             
             // Display: #1 PlayerName - 3:45 (2500💎)
@@ -4568,7 +4568,7 @@ export class DefogGame extends Phaser.Scene {
                 strokeThickness: 2
             });
             text.setOrigin(0.5);
-            text.setDepth(15001);
+            text.setDepth(20001);
             
             yPos += 60;
         });
@@ -4579,7 +4579,7 @@ export class DefogGame extends Phaser.Scene {
             
             // Highlight background
             const bg = this.add.rectangle(width / 2, yPos, width * 0.8, 50, 0x00ff88, 0.3);
-            bg.setDepth(15000);
+            bg.setDepth(20000);
             
             const text = this.add.text(width / 2, yPos, 
                 `#${playerRank}  ${playerScore.playerName} (you) - ${this.formatTime(playerScore.time)} (${playerScore.diamonds}💎)`, {
@@ -4591,7 +4591,7 @@ export class DefogGame extends Phaser.Scene {
                 strokeThickness: 2
             });
             text.setOrigin(0.5);
-            text.setDepth(15001);
+            text.setDepth(20001);
         }
         
         // Close button
@@ -4604,7 +4604,7 @@ export class DefogGame extends Phaser.Scene {
             padding: { x: 30, y: 15 }
         });
         closeButton.setOrigin(0.5);
-        closeButton.setDepth(15001);
+        closeButton.setDepth(20001);
         closeButton.setInteractive({ useHandCursor: true });
         
         closeButton.on('pointerover', () => {
@@ -4624,7 +4624,7 @@ export class DefogGame extends Phaser.Scene {
             
             // Destroy all score texts and backgrounds
             this.children.list.forEach(child => {
-                if (child.depth === 15000 || child.depth === 15001) {
+                if (child.depth === 20000 || child.depth === 20001) {
                     child.destroy();
                 }
             });
