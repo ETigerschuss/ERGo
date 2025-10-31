@@ -219,19 +219,19 @@ export class InsectSelection extends Phaser.Scene {
         }).setOrigin(0.5);
         
         // Stats
-        this.add.text(x, y + 35, `👁️ ${insect.ommatidia?.toLocaleString() || '?'} ommatidia`, {
+        this.add.text(x, y + 35, `👁️ ${insect.ommatidia?.toLocaleString() || '?'} Ommatidien`, {
             fontSize: '12px',
             fontFamily: 'Arial, sans-serif',
             color: isUnlocked ? '#4ecdc4' : '#444444'
         }).setOrigin(0.5);
         
-        this.add.text(x, y + 55, `⚡ Speed: ${insect.speed}/5`, {
+        this.add.text(x, y + 55, `⚡ Geschwindigkeit: ${insect.speed}/5`, {
             fontSize: '12px',
             fontFamily: 'Arial, sans-serif',
             color: isUnlocked ? '#cccccc' : '#444444'
         }).setOrigin(0.5);
         
-        this.add.text(x, y + 75, `🌈 ${insect.colorSpectrum?.join('-') || 'Unknown'}`, {
+        this.add.text(x, y + 75, `🌈 ${insect.colorSpectrum?.join('-') || 'Unbekannt'}`, {
             fontSize: '12px',
             fontFamily: 'Arial, sans-serif',
             color: isUnlocked ? '#ff6b6b' : '#444444'
@@ -239,13 +239,13 @@ export class InsectSelection extends Phaser.Scene {
         
         // Lock or Start button
         if (!isUnlocked) {
-            this.add.text(x, y + 110, '🔒 Locked', {
+            this.add.text(x, y + 110, '🔒 Gesperrt', {
                 fontSize: '18px',
                 fontFamily: 'Arial, sans-serif',
                 color: '#666666'
             }).setOrigin(0.5);
         } else {
-            const startBtn = this.add.text(x, y + 110, '▶ Start Game', {
+            const startBtn = this.add.text(x, y + 110, '▶ Spiel starten', {
                 fontSize: '18px',
                 fontFamily: 'Arial, sans-serif',
                 color: '#00ff00',

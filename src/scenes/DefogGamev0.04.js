@@ -3588,7 +3588,7 @@ export class DefogGame extends Phaser.Scene {
         // Show message
         const width = this.scale.width;
         const height = this.scale.height;
-        const message = this.add.text(width / 2, height / 2, '🌈 COLOR VISION UNLOCKED!\nYou can now see Red, Green & Blue resources!', {
+        const message = this.add.text(width / 2, height / 2, '🌈 FARBSEHEN FREIGESCHALTET!\nDu kannst jetzt Rot, Grün & Blau Ressourcen sehen!', {
             fontSize: '32px',
             color: '#ffffff',
             backgroundColor: '#000000dd',
@@ -3917,7 +3917,7 @@ export class DefogGame extends Phaser.Scene {
             .setInteractive({ useHandCursor: true })
             .setVisible(false);
         
-        this.finishLevelButtonText = this.add.text(timerX, timerY + 50, 'Finish Level', {
+        this.finishLevelButtonText = this.add.text(timerX, timerY + 50, 'Level Beenden', {
             fontSize: '13px',
             color: '#ffffff',
             fontStyle: 'bold',
@@ -4208,7 +4208,7 @@ export class DefogGame extends Phaser.Scene {
         } else if (hasNextLevel) {
             // Next Level button
             const nextLevelButton = this.add.text(width / 2, buttonsY,
-                `▶ Next Level (${nextLevel})`, {
+                `▶ Nächstes Level (${nextLevel})`, {
                 fontSize: '32px',
                 color: '#ffffff',
                 backgroundColor: '#00aa00',
@@ -4383,7 +4383,7 @@ export class DefogGame extends Phaser.Scene {
             .setScrollFactor(0)
             .setAlpha(0);
         
-        const highscoresText = this.add.text(width / 2 + 120, nextButtonY, '📊 Highscores', {
+        const highscoresText = this.add.text(width / 2 + 120, nextButtonY, '📊 Bestenliste', {
             fontSize: '20px',
             color: '#ffffff',
             fontStyle: 'bold',
@@ -4544,7 +4544,7 @@ export class DefogGame extends Phaser.Scene {
         overlay.setDepth(10000);
 
         // Title
-        const title = this.add.text(width / 2, 50, `📋 Level ${this.currentLevel} - How to Play`, {
+        const title = this.add.text(width / 2, 50, `📋 Level ${this.currentLevel} - Spielanleitung`, {
             fontSize: '40px',
             fontFamily: 'Arial',
             color: '#ffdd00',
@@ -4554,7 +4554,7 @@ export class DefogGame extends Phaser.Scene {
         title.setDepth(10001);
 
         // Explanation header
-        const explainHeader = this.add.text(width / 2, 110, '🧬 About Rhodopsins & Color Sensitivities:', {
+        const explainHeader = this.add.text(width / 2, 110, '🧬 Über Rhodopsine & Farbempfindlichkeiten:', {
             fontSize: '22px',
             fontFamily: 'Arial',
             color: '#00ffff',
@@ -4563,7 +4563,7 @@ export class DefogGame extends Phaser.Scene {
         explainHeader.setOrigin(0.5);
         explainHeader.setDepth(10001);
 
-        const explainText = this.add.text(width / 2, 145, 'Insects reveal the picture and earn rhodopsins (⚫🔴🟢🔵)\nbased on their color sensitivity. Use rhodopsins to unlock new species!', {
+        const explainText = this.add.text(width / 2, 145, 'Insekten enthüllen das Bild und sammeln Rhodopsine (⚫🔴🟢🔵)\nbasierend auf ihrer Farbempfindlichkeit. Nutze Rhodopsine um neue Arten freizuschalten!', {
             fontSize: '16px',
             fontFamily: 'Arial',
             color: '#aaaaaa',
@@ -4574,7 +4574,7 @@ export class DefogGame extends Phaser.Scene {
         explainText.setDepth(10001);
 
         // Rule 1
-        const rule1 = this.add.text(width / 2, 200, '⏱️ Unlock all 16 species as quick as possible', {
+        const rule1 = this.add.text(width / 2, 200, '⏱️ Schalte alle 16 Arten so schnell wie möglich frei', {
             fontSize: '22px',
             fontFamily: 'Arial',
             color: '#ffffff',
@@ -4583,7 +4583,7 @@ export class DefogGame extends Phaser.Scene {
         rule1.setOrigin(0.5);
         rule1.setDepth(10001);
 
-        const rule1sub = this.add.text(width / 2, 225, 'to earn time bonus diamonds!', {
+        const rule1sub = this.add.text(width / 2, 225, 'um Zeitbonus-Diamanten zu verdienen!', {
             fontSize: '16px',
             fontFamily: 'Arial',
             color: '#aaaaaa'
@@ -4592,7 +4592,7 @@ export class DefogGame extends Phaser.Scene {
         rule1sub.setDepth(10001);
 
         // Rule 2
-        const rule2 = this.add.text(width / 2, 265, '🖼️ Unravel as much of the picture as possible', {
+        const rule2 = this.add.text(width / 2, 265, '🖼️ Enthülle so viel vom Bild wie möglich', {
             fontSize: '22px',
             fontFamily: 'Arial',
             color: '#ffffff',
@@ -4601,7 +4601,7 @@ export class DefogGame extends Phaser.Scene {
         rule2.setOrigin(0.5);
         rule2.setDepth(10001);
 
-        const rule2sub = this.add.text(width / 2, 290, 'to convert rhodopsins into diamonds!', {
+        const rule2sub = this.add.text(width / 2, 290, 'um Rhodopsine in Diamanten zu verwandeln!', {
             fontSize: '16px',
             fontFamily: 'Arial',
             color: '#aaaaaa'
@@ -4610,7 +4610,7 @@ export class DefogGame extends Phaser.Scene {
         rule2sub.setDepth(10001);
 
         // Rule 3
-        const rule3 = this.add.text(width / 2, 330, '🚫 Only 1 species per family allowed', {
+        const rule3 = this.add.text(width / 2, 330, '🚫 Nur 1 Art pro Familie erlaubt', {
             fontSize: '22px',
             fontFamily: 'Arial',
             color: '#ffffff',
@@ -4619,7 +4619,7 @@ export class DefogGame extends Phaser.Scene {
         rule3.setOrigin(0.5);
         rule3.setDepth(10001);
 
-        const rule3sub = this.add.text(width / 2, 355, 'Wait till species disappears before spawning another from same family', {
+        const rule3sub = this.add.text(width / 2, 355, 'Warte bis die Art verschwindet bevor du eine andere aus derselben Familie erzeugst', {
             fontSize: '16px',
             fontFamily: 'Arial',
             color: '#aaaaaa'
@@ -4628,7 +4628,7 @@ export class DefogGame extends Phaser.Scene {
         rule3sub.setDepth(10001);
 
         // Rule 4
-        const rule4 = this.add.text(width / 2, 395, '⚠️ Maximum 3 species active at the same time', {
+        const rule4 = this.add.text(width / 2, 395, '⚠️ Maximal 3 Arten gleichzeitig aktiv', {
             fontSize: '22px',
             fontFamily: 'Arial',
             color: '#ffffff',
@@ -4637,7 +4637,7 @@ export class DefogGame extends Phaser.Scene {
         rule4.setOrigin(0.5);
         rule4.setDepth(10001);
 
-        const rule4sub = this.add.text(width / 2, 420, 'Choose your strategy wisely!', {
+        const rule4sub = this.add.text(width / 2, 420, 'Wähle deine Strategie weise!', {
             fontSize: '16px',
             fontFamily: 'Arial',
             color: '#aaaaaa'
@@ -4651,7 +4651,7 @@ export class DefogGame extends Phaser.Scene {
         startButton.setDepth(10001);
         startButton.setInteractive({ useHandCursor: true });
 
-        const startButtonText = this.add.text(width / 2, buttonY, '▶ START LEVEL', {
+        const startButtonText = this.add.text(width / 2, buttonY, '▶ LEVEL STARTEN', {
             fontSize: '28px',
             fontFamily: 'Arial',
             color: '#ffffff',
