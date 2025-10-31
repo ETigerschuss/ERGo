@@ -196,8 +196,8 @@ export class DefogGame extends Phaser.Scene {
         // this.startSpawnTimer(15);
         console.log('⚠️ Automatic spawning disabled - click species boxes to unlock/spawn');
 
-        // Instructions (split into two lines for readability)
-        this.add.text(width / 2, 12, 'Click species box to unlock/spawn insects | Click insect to select, click to set path', {
+        // Anweisungen (in zwei Zeilen aufgeteilt für bessere Lesbarkeit)
+        this.add.text(width / 2, 12, 'Klicke auf Art-Box um Insekten freizuschalten | Klicke auf Insekt zum Auswählen, klicke um Pfad zu setzen', {
             fontSize: '12px',
             color: '#ffffff',
             backgroundColor: '#000000dd',
@@ -205,7 +205,7 @@ export class DefogGame extends Phaser.Scene {
             align: 'center'
         }).setOrigin(0.5).setDepth(3000);
         
-        this.add.text(width / 2, 28, 'Mini emojis select insects | Click empty area to command all insects', {
+        this.add.text(width / 2, 28, 'Mini-Emojis wählen Insekten | Klicke auf leeren Bereich um alle Insekten zu befehligen', {
             fontSize: '12px',
             color: '#ffffff',
             backgroundColor: '#000000dd',
