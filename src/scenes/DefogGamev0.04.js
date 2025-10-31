@@ -602,6 +602,7 @@ export class DefogGame extends Phaser.Scene {
                     miniEmojiContainer,
                     miniEmojis: [], // Will store mini emoji sprites
                     blockedIndicator: null, // Will be created when needed for accessibility
+                    blinkTween: null, // Will store blinking animation for affordable species
                     costIndicators, // v0.04: Cost displays (array)
                     programmedWaypoint: null, // Will store {x, y} when waypoint is set
                     isCurrent,
@@ -693,7 +694,7 @@ export class DefogGame extends Phaser.Scene {
     }
     
     handleSpeciesBoxClick(boxData, pointer) {
-        // v0.04: Click on species box to UNLOCK/BUY insect
+        // v0.04: Click on species box to UNLOCK/BUY insect OR select/unselect active insects
         const insectId = boxData.speciesId;
         const insectData = INSECT_DATABASE[insectId];
         const costs = UNLOCK_COSTS[insectId];
@@ -701,7 +702,63 @@ export class DefogGame extends Phaser.Scene {
         
         console.log(`📦 Species box clicked: ${insectData.name} (${family})`);
         
-        // v0.04: Check if species is currently active (has living insects)
+        // NEW: If species is currently active AND unlocked, toggle selection of all individuals
+        if (this.activeSpecies.has(insectId) && this.unlockedInsects.includes(insectId)) {
+            const insectsOfThisSpecies = this.insects.filter(i => 
+                i.insectId === insectId && !i.isDead
+            );
+            
+            if (insectsOfThisSpecies.length > 0) {
+                // Check if any are currently selected
+                const anySelected = insectsOfThisSpecies.some(i => i.isSelected);
+                
+                if (anySelected) {
+                    // UNSELECT all of this species
+                    console.log(`🔴 Unselecting all ${insectData.name} (${insectsOfThisSpecies.length} insects)`);
+                    insectsOfThisSpecies.forEach(insect => {
+                        insect.isSelected = false;
+                        insect.selectionRing.setAlpha(0);
+                        if (insect.spectrumIndicators) {
+                            insect.spectrumIndicators.forEach(ind => ind.setVisible(false));
+                        }
+                        if (insect.lifespanCircle) insect.lifespanCircle.setVisible(false);
+                        if (insect.lifespanCircleBg) insect.lifespanCircleBg.setAlpha(0);
+                    });
+                    this.selectedInsectIndices = [];
+                } else {
+                    // SELECT all of this species
+                    console.log(`🟢 Selecting all ${insectData.name} (${insectsOfThisSpecies.length} insects)`);
+                    
+                    // First deselect everything
+                    this.insects.forEach(i => {
+                        i.isSelected = false;
+                        i.selectionRing.setAlpha(0);
+                        if (i.spectrumIndicators) {
+                            i.spectrumIndicators.forEach(ind => ind.setVisible(false));
+                        }
+                        if (i.lifespanCircle) i.lifespanCircle.setVisible(false);
+                        if (i.lifespanCircleBg) i.lifespanCircleBg.setAlpha(0);
+                    });
+                    
+                    // Then select all of this species
+                    this.selectedInsectIndices = [];
+                    insectsOfThisSpecies.forEach(insect => {
+                        insect.isSelected = true;
+                        insect.timeAtPosition = 0; // Reset idle timer when selected
+                        // Show lifespan circle for selected insects
+                        if (insect.lifespanCircle) insect.lifespanCircle.setVisible(true);
+                        if (insect.lifespanCircleBg) insect.lifespanCircleBg.setAlpha(1);
+                        this.selectedInsectIndices.push(insect.index);
+                    });
+                }
+                
+                // Update mini emojis to show selection state
+                this.updateMiniEmojis();
+                return;
+            }
+        }
+        
+        // If species is active but NOT unlocked (shouldn't happen), show message
         if (this.activeSpecies.has(insectId)) {
             console.log(`⏸️ ${insectData.name} are still alive! Wait for them to die before spawning more.`);
             console.log(`   → Can only spawn ONCE until all die`);
@@ -1102,6 +1159,7 @@ export class DefogGame extends Phaser.Scene {
         
         // Select this insect and show indicators
         insect.isSelected = true;
+        insect.timeAtPosition = 0; // Reset idle timer when selected
         console.log(`✅ Insect ${insect.insectId} marked as selected`);
         // DON'T show selection ring - only lifespan circle
         insect.selectionRing.setAlpha(0);
@@ -1176,11 +1234,16 @@ export class DefogGame extends Phaser.Scene {
         const allActiveSpecies = this.getAllActiveSpecies();
         const atSpeciesLimit = allActiveSpecies.length >= 3;
         
-        // Build map of active species per family
-        const activeFamilySpecies = new Map();
+        // CRITICAL FIX: Rebuild activeFamilies from scratch based on CURRENT living insects
+        // This ensures we never have stale family locks
+        this.activeFamilies.clear();
         this.insects.forEach(insect => {
             if (!insect.isDead) {
-                activeFamilySpecies.set(insect.superfamily, insect.insectId);
+                const family = insect.superfamily;
+                const speciesId = insect.insectId;
+                if (!this.activeFamilies.has(family)) {
+                    this.activeFamilies.set(family, speciesId);
+                }
             }
         });
         
@@ -1197,8 +1260,8 @@ export class DefogGame extends Phaser.Scene {
             const isSpeciesActive = allActiveSpecies.includes(speciesId);
             
             // Check if family has a different species active
-            const familyHasOtherSpecies = activeFamilySpecies.has(family) && 
-                                          activeFamilySpecies.get(family) !== speciesId;
+            const familyHasOtherSpecies = this.activeFamilies.has(family) && 
+                                          this.activeFamilies.get(family) !== speciesId;
             
             // Check if blocked: at 3-species total limit OR family has different species active
             const isBlocked = (atSpeciesLimit && !isSpeciesActive) || familyHasOtherSpecies;
@@ -1216,18 +1279,48 @@ export class DefogGame extends Phaser.Scene {
                 borderColor = 0xff0000; // Bright red border
                 nameColor = '#ff3333'; // Bright red name
                 emojiSize = '20px';
+                
+                // Stop any blinking animation
+                if (boxData.blinkTween) {
+                    boxData.blinkTween.stop();
+                    boxData.blinkTween = null;
+                }
             } else if (isUnlocked) {
                 // Unlocked (always FREE and affordable!)
                 boxColor = 0x16213e; // Blue
                 borderColor = 0x00ff00; // Green border
                 nameColor = '#00ff00';
                 emojiSize = '28px';
+                
+                // Stop any blinking animation
+                if (boxData.blinkTween) {
+                    boxData.blinkTween.stop();
+                    boxData.blinkTween = null;
+                }
             } else if (canAfford) {
-                // Not unlocked but CAN afford to unlock
+                // Not unlocked but CAN afford to unlock - ADD STRONG BLINKING!
                 boxColor = 0x1a2a1a; // Green tint
                 borderColor = 0x44aa44;
                 nameColor = '#44ff44';
                 emojiSize = '24px';
+                
+                // Add STRONGER blinking animation to draw attention
+                if (!boxData.blinkTween) {
+                    boxData.blinkTween = this.tweens.add({
+                        targets: boxData.box,
+                        alpha: 0.5, // Fade down to 50% (was 70% - now more noticeable)
+                        duration: 800, // 0.8 seconds (was 1.2s - now faster)
+                        yoyo: true, // Fade back up
+                        repeat: -1, // Infinite loop
+                        ease: 'Sine.easeInOut'
+                    });
+                }
+            } else {
+                // Locked and can't afford - stop any blinking
+                if (boxData.blinkTween) {
+                    boxData.blinkTween.stop();
+                    boxData.blinkTween = null;
+                }
             }
             // else: stays default gray (locked + can't afford)
             
@@ -2183,7 +2276,10 @@ export class DefogGame extends Phaser.Scene {
                     const insectData = INSECT_DATABASE[boxData.speciesId];
                     const insectSpeed = insectData.speed || 1;
                     const lifespan = boxData.speciesId === 'ant' ? 117000 : 90000 / insectSpeed; // Ants: 117s (35% shorter)
-                    const maxDistance = (lifespan / 1000) * insectSpeed * 30; // pixels = (seconds) * (speed factor) * 30
+                    // FIXED: Match movement speed formula (speed * 0.05 * delta * frames)
+                    // Movement: speed * 0.05 pixels per millisecond ≈ speed * 50 pixels per second (at 60fps)
+                    // Max distance = (lifespan in seconds) * (speed * 50)
+                    const maxDistance = (lifespan / 1000) * insectSpeed * 50; // pixels = (seconds) * (speed factor) * 50
                     
                     // Get spawn position (image center)
                     const spawnX = this.imageBounds.left + (this.imageBounds.right - this.imageBounds.left) / 2;
@@ -2335,9 +2431,10 @@ export class DefogGame extends Phaser.Scene {
             } else {
                 // Clicked on empty area (already verified within image bounds above)
                 if (hasSelection) {
-                    // Case 4: Add waypoint to selected insect's path
-                    console.log(`📍 Adding waypoint at (${Math.round(pointer.x)}, ${Math.round(pointer.y)})`);
-                    this.addWaypoint(pointer.x, pointer.y, true); // Always add to path
+                    // Case 4: Add waypoint to selected insect(s) path
+                    const selectedCount = this.selectedInsectIndices.length;
+                    console.log(`📍 Adding waypoint at (${Math.round(pointer.x)}, ${Math.round(pointer.y)}) to ${selectedCount} selected insect(s)`);
+                    this.addWaypointToSelected(pointer.x, pointer.y);
                 } else {
                     // Case 5: Group command - all insects move
                     console.log(`🐝 GROUP COMMAND: All insects to (${Math.round(pointer.x)}, ${Math.round(pointer.y)})`);
@@ -2398,6 +2495,7 @@ export class DefogGame extends Phaser.Scene {
         // Select this insect and show its current path
         this.selectedInsectIndices = [index];
         insect.isSelected = true;
+        insect.timeAtPosition = 0; // Reset idle timer when selected
         insect.userControlled = false; // Reset - next click will REPLACE path
         // DON'T show selection ring - only lifespan circle
         insect.selectionRing.setAlpha(0);
@@ -2454,7 +2552,9 @@ export class DefogGame extends Phaser.Scene {
         // Calculate maximum distance based on REMAINING lifespan and speed
         const speed = insect.data.speed || 1;
         const remainingLifespan = insect.lifespan - insect.age; // Remaining lifetime in milliseconds
-        const maxDistance = (remainingLifespan / 1000) * speed * 30; // pixels = (seconds) * (speed factor) * 30
+        // FIXED: Match movement speed formula (speed * 0.05 * delta * frames)
+        // Movement: speed * 0.05 pixels per millisecond ≈ speed * 50 pixels per second (at 60fps)
+        const maxDistance = (remainingLifespan / 1000) * speed * 50; // pixels = (seconds) * (speed factor) * 50
         
         // Check if path exceeds remaining lifetime
         if (totalDistance > maxDistance) {
@@ -2504,6 +2604,124 @@ export class DefogGame extends Phaser.Scene {
         
         // Redraw path
         this.drawPath(insect);
+    }
+
+    addWaypointToSelected(x, y) {
+        // Add waypoint to ALL selected insects
+        if (this.selectedInsectIndices.length === 0) {
+            console.log('⚠️ No insects selected');
+            return;
+        }
+        
+        console.log(`📍 Adding waypoint to ${this.selectedInsectIndices.length} selected insect(s)`);
+        
+        let anyPathTooLong = false;
+        let successCount = 0;
+        
+        // Add waypoint to each selected insect
+        this.selectedInsectIndices.forEach(index => {
+            const insect = this.insects[index];
+            if (!insect || insect.isDead) return;
+            
+            // For first user command, IGNORE any spawn waypoints and just check direct distance
+            // This is the key fix - spawn waypoints shouldn't block user commands!
+            let totalDistance = 0;
+            
+            if (!insect.userControlled) {
+                // First user command - just check direct distance from current position
+                const dx = x - insect.sprite.x;
+                const dy = y - insect.sprite.y;
+                totalDistance = Math.sqrt(dx * dx + dy * dy);
+                
+                console.log(`  ${insect.data.name} [FIRST CMD]: checking direct distance = ${totalDistance.toFixed(0)}px`);
+            } else {
+                // Has existing USER waypoints - calculate full path
+                let lastX = insect.sprite.x;
+                let lastY = insect.sprite.y;
+                
+                // Add distance for existing USER waypoints only
+                insect.waypoints.forEach(wp => {
+                    const dx = wp.x - lastX;
+                    const dy = wp.y - lastY;
+                    totalDistance += Math.sqrt(dx * dx + dy * dy);
+                    lastX = wp.x;
+                    lastY = wp.y;
+                });
+                
+                // Add distance to new waypoint
+                const dx = x - lastX;
+                const dy = y - lastY;
+                totalDistance += Math.sqrt(dx * dx + dy * dy);
+                
+                console.log(`  ${insect.data.name} [ADD TO PATH]: total path = ${totalDistance.toFixed(0)}px (${insect.waypoints.length} existing waypoints)`);
+            }
+            
+            // Check against remaining lifespan
+            const speed = insect.data.speed * 0.05; // pixels per millisecond
+            const remainingLifespan = insect.lifespan - insect.age;
+            // FIXED: Increased multiplier from 50 to 600 for more reasonable max distances
+            // Speed 1 (slow): 90s × 0.05 × 600 = 2700px
+            // Speed 2 (normal): 60s × 0.10 × 600 = 3600px
+            // Speed 4 (fast): 30s × 0.20 × 600 = 3600px
+            const maxDistance = (remainingLifespan / 1000) * speed * 600;
+            
+            console.log(`  Max distance: ${maxDistance.toFixed(0)}px, age: ${(insect.age/1000).toFixed(1)}s / ${(insect.lifespan/1000).toFixed(1)}s`);
+            
+            if (totalDistance > maxDistance) {
+                console.log(`  ⚠️ Path TOO LONG for ${insect.data.name}! (${totalDistance.toFixed(0)} > ${maxDistance.toFixed(0)})`);
+                anyPathTooLong = true;
+                
+                // Blink this insect to show path is too long
+                this.tweens.add({
+                    targets: insect.sprite,
+                    alpha: 0.3,
+                    duration: 150,
+                    yoyo: true,
+                    repeat: 3,
+                    onComplete: () => {
+                        insect.sprite.setAlpha(1);
+                    }
+                });
+                return; // Skip this insect
+            }
+            
+            // Add waypoint - replace any spawn waypoints for first command
+            if (!insect.userControlled) {
+                // First command - CLEAR spawn waypoints and replace with user command
+                insect.waypoints = [{ x, y }];
+                insect.userControlled = true;
+                console.log(`  🎯 First user command - replaced spawn path for ${insect.data.name}`);
+            } else {
+                // Add to existing path
+                insect.waypoints.push({ x, y });
+                console.log(`  📍 Added waypoint to ${insect.data.name} (now ${insect.waypoints.length} waypoints)`);
+            }
+            
+            insect.randomWalkMode = false;
+            this.drawPath(insect);
+            successCount++;
+        });
+        
+        console.log(`✅ Waypoint added to ${successCount}/${this.selectedInsectIndices.length} insects`);
+        
+        // If ANY insects had path too long, deselect all after animation
+        if (anyPathTooLong && successCount === 0) {
+            // ALL insects failed - deselect everything
+            this.time.delayedCall(600, () => {
+                this.insects.forEach(insect => {
+                    insect.isSelected = false;
+                    insect.selectionRing.setAlpha(0);
+                    if (insect.spectrumIndicators) {
+                        insect.spectrumIndicators.forEach(ind => ind.setVisible(false));
+                    }
+                    if (insect.lifespanCircle) insect.lifespanCircle.setVisible(false);
+                    if (insect.lifespanCircleBg) insect.lifespanCircleBg.setAlpha(0);
+                });
+                this.selectedInsectIndices = [];
+                this.updateMiniEmojis();
+                console.log(`✓ All deselected (all paths too long)`);
+            });
+        }
     }
 
     addGroupWaypoint(x, y) {
@@ -2600,29 +2818,66 @@ export class DefogGame extends Phaser.Scene {
         // Clean up activeSpecies Set and activeFamilies Map every 30 frames (more responsive)
         if (this.updateFrameCounter % 30 === 0) {
             const activeSpeciesIds = new Set(this.insects.map(i => i.insectId));
-            const activeFamiliesSet = new Set(); // Track which families still have active insects
+            const currentActiveFamilies = new Map(); // Rebuild based on current insects
             
+            let speciesChanged = false;
+            let familiesChanged = false;
+            
+            // Rebuild active species set
             for (const speciesId of this.activeSpecies) {
                 if (!activeSpeciesIds.has(speciesId)) {
                     this.activeSpecies.delete(speciesId);
-                    console.log(`🔓 Cleaned up ${speciesId} from activeSpecies`);
-                    this.updateSpeciesBoxHighlights();
+                    console.log(`🔓 [Periodic cleanup] Removed ${speciesId} from activeSpecies`);
+                    speciesChanged = true;
                 }
             }
             
-            // Rebuild activeFamilies based on current insects (more reliable)
+            // Rebuild activeFamilies based on CURRENT insects
+            // For each family, find which species are alive
             for (const insect of this.insects) {
                 if (!insect.isDead) {
-                    activeFamiliesSet.add(insect.superfamily);
+                    const family = insect.superfamily;
+                    const speciesId = insect.insectId;
+                    
+                    // If family already has a species, check if it's the same
+                    if (currentActiveFamilies.has(family)) {
+                        // Multiple species from same family - keep the first one encountered
+                        // (This shouldn't happen normally, but defensive coding)
+                        const existingSpecies = currentActiveFamilies.get(family);
+                        if (existingSpecies !== speciesId) {
+                            console.warn(`⚠️ [Periodic cleanup] Family ${family} has multiple species: ${existingSpecies} and ${speciesId}`);
+                        }
+                    } else {
+                        currentActiveFamilies.set(family, speciesId);
+                    }
                 }
             }
             
-            // Only clear families that no longer have any insects
-            for (const family of this.activeFamilies.keys()) {
-                if (!activeFamiliesSet.has(family)) {
-                    this.activeFamilies.delete(family);
-                    console.log(`🔓 Family ${family} is now completely FREE`);
+            // Check if families changed
+            if (this.activeFamilies.size !== currentActiveFamilies.size) {
+                familiesChanged = true;
+            } else {
+                // Check if same families with same species
+                for (const [family, speciesId] of currentActiveFamilies) {
+                    if (this.activeFamilies.get(family) !== speciesId) {
+                        familiesChanged = true;
+                        break;
+                    }
                 }
+            }
+            
+            // Replace activeFamilies with the rebuilt version
+            this.activeFamilies = currentActiveFamilies;
+            
+            // Update UI if anything changed
+            if (speciesChanged || familiesChanged) {
+                console.log(`🔄 [Periodic cleanup] State changed - updating UI`);
+                this.updateSpeciesBoxHighlights();
+            }
+            
+            // Log if families changed
+            if (this.updateFrameCounter % 120 === 0) { // Log every 2 seconds
+                console.log(`📊 [Periodic cleanup] Active families:`, Array.from(this.activeFamilies.entries()).map(([f, s]) => `${f}→${s}`));
             }
         }
         
@@ -2631,6 +2886,7 @@ export class DefogGame extends Phaser.Scene {
         // IMPORTANT: Capture selected insects BEFORE filtering
         const oldSelectedIndices = [...this.selectedInsectIndices];
         const selectedInsects = oldSelectedIndices.map(idx => this.insects[idx]).filter(i => i && i.sprite); // Get actual insect objects
+        const selectedInsectIds = new Set(selectedInsects.map(i => i.index)); // Store original indices to detect deaths
         
         // Age insects and remove dead ones
         this.insects = this.insects.filter(insect => {
@@ -2638,8 +2894,7 @@ export class DefogGame extends Phaser.Scene {
             
             if (insect.age >= insect.lifespan) {
                 // Insect died - check if it was selected
-                const wasSelected = insect.isSelected;
-                const selectedIndex = this.selectedInsectIndices.indexOf(insect.index);
+                const wasSelected = selectedInsectIds.has(insect.index);
                 
                 // v0.04: Store species ID before destroying
                 const dyingSpeciesId = insect.insectId; // Changed from speciesId to insectId
@@ -2653,7 +2908,12 @@ export class DefogGame extends Phaser.Scene {
                 insect.pathGraphics.destroy();
                 insect.spectrumIndicators.forEach(ind => ind.destroy());
                 
-                console.log(`💀 ${insect.data.name} died after ${(insect.age/1000).toFixed(1)}s`);
+                console.log(`💀 ${insect.data.name} died after ${(insect.age/1000).toFixed(1)}s${wasSelected ? ' (was SELECTED)' : ''}`);
+                
+                // NEW: If a selected insect died, mark that we need to clear selection
+                if (wasSelected) {
+                    insectsChanged = true; // Will trigger clearing selection below
+                }
                 
                 // v0.04: Check if this was the last insect of this species
                 // Check remaining insects EXCLUDING this one
@@ -2667,16 +2927,25 @@ export class DefogGame extends Phaser.Scene {
                     console.log(`🔓 All ${dyingSpeciesData.name} have died - can respawn now!`);
                     console.log(`   → Active species remaining:`, Array.from(this.activeSpecies));
                     
-                    // Check if ANY species from this family are still alive
-                    const familyHasOtherSpecies = this.insects.filter(i => i !== insect).some(i => i.superfamily === family);
+                    // FIXED: Check if ANY OTHER species from this family are still alive
+                    // Filter out the dying insect AND check for different species IDs
+                    const otherFamilySpecies = this.insects.filter(i => 
+                        i !== insect && // Not the dying insect
+                        i.superfamily === family && // Same family
+                        i.insectId !== dyingSpeciesId // Different species
+                    );
                     
-                    if (!familyHasOtherSpecies) {
-                        // ONLY delete family if NO other species from this family are alive
+                    console.log(`   → Checking family ${family}: otherFamilySpecies count = ${otherFamilySpecies.length}`);
+                    
+                    if (otherFamilySpecies.length === 0) {
+                        // NO other species from this family alive - family is FREE!
                         this.activeFamilies.delete(family);
                         console.log(`🔓 Family ${family} is now COMPLETELY FREE - you can spawn ANY species from this family!`);
                     } else {
-                        // Family still has other species alive - DON'T delete it, just update highlights
-                        console.log(`⚠️ Family ${family} still has other species alive - family remains occupied`);
+                        // Family still has other species alive - DON'T delete it
+                        const otherSpeciesId = otherFamilySpecies[0].insectId;
+                        const otherSpeciesData = INSECT_DATABASE[otherSpeciesId];
+                        console.log(`⚠️ Family ${family} still has ${otherSpeciesData.name} alive (${otherFamilySpecies.length} individuals) - family remains occupied`);
                     }
                     
                     console.log(`   → Active families remaining:`, Array.from(this.activeFamilies.keys()));
@@ -2755,10 +3024,27 @@ export class DefogGame extends Phaser.Scene {
             insect.sprite.setData('insectIndex', newIdx);
         });
         
-        // Update selectedInsectIndices to match new indices
-        this.selectedInsectIndices = [];
-        selectedInsects.forEach(selectedInsect => {
-            if (selectedInsect && selectedInsect.index !== undefined) {
+        // Check if any selected insects died by comparing surviving insects with captured selection
+        const survivingSelectedInsects = selectedInsects.filter(selectedInsect => 
+            selectedInsect && this.insects.includes(selectedInsect)
+        );
+        
+        // If ANY selected insect died, CLEAR the entire selection (don't jump to next)
+        if (survivingSelectedInsects.length < selectedInsects.length) {
+            console.log(`🔴 Selected insect(s) died - clearing selection (${selectedInsects.length} → ${survivingSelectedInsects.length} survivors)`);
+            this.selectedInsectIndices = [];
+            // Hide indicators for any survivors
+            survivingSelectedInsects.forEach(insect => {
+                insect.isSelected = false;
+                if (insect.lifespanCircle) insect.lifespanCircle.setVisible(false);
+                if (insect.lifespanCircleBg) insect.lifespanCircleBg.setAlpha(0);
+                if (insect.selectionRing) insect.selectionRing.setAlpha(0);
+                if (insect.pathGraphics) insect.pathGraphics.clear();
+            });
+        } else if (survivingSelectedInsects.length > 0) {
+            // All selected insects survived - update their indices
+            this.selectedInsectIndices = [];
+            survivingSelectedInsects.forEach(selectedInsect => {
                 this.selectedInsectIndices.push(selectedInsect.index);
                 
                 // Make sure visual indicators are shown
@@ -2778,12 +3064,9 @@ export class DefogGame extends Phaser.Scene {
                     this.drawPath(selectedInsect);
                 }
                 
-                // Force mini-emoji update to show selection
-                insectsChanged = true;
-                
                 console.log(`✅ Preserved selection: ${selectedInsect.data.name} at new index ${selectedInsect.index}`);
-            }
-        });
+            });
+        }
         
         // CRITICAL: Create a copy of insects array to prevent iterator issues during modification
         const insectsSnapshot = [...this.insects];
@@ -2817,6 +3100,13 @@ export class DefogGame extends Phaser.Scene {
                 const focusSpeed = temporalResolution * 0.0008;
                 insect.timeAtPosition += delta;
                 insect.focusLevel = Math.min(1, insect.focusLevel + focusSpeed * delta);
+                
+                // NEW: If unselected and idle for 3 seconds with no waypoints, start random walking
+                if (!insect.isSelected && insect.waypoints.length === 0 && insect.timeAtPosition > 3000) {
+                    console.log(`🚶 ${insect.data.name} idle for 3s - starting random walk`);
+                    this.addRandomWaypoint(insect);
+                    insect.timeAtPosition = 0; // Reset idle timer
+                }
             } else {
                 // Moving - instant partial reveal for fast insects, delay for slow
                 insect.timeAtPosition = 0;
