@@ -3629,29 +3629,29 @@ export class DefogGame extends Phaser.Scene {
         const scientificName = insectEntry ? insectEntry[1].scientificName : '';
         const genus = scientificName.split(' ')[0]; // First word = genus
         
-        // Simple genus-to-common name mapping
+        // Specific genus-to-German mapping (as precise as possible)
         const genusToGerman = {
-            'Formica': 'Ameise',
-            'Apis': 'Biene',
+            'Formica': 'Waldameise',
+            'Apis': 'Honigbiene',
             'Bombus': 'Hummel',
             'Vespa': 'Hornisse',
-            'Aedes': 'Mücke',
-            'Drosophila': 'Fruchtfliege',
-            'Musca': 'Fliege',
+            'Aedes': 'Tigermücke',
+            'Drosophila': 'Taufliege',
+            'Musca': 'Stubenfliege',
             'Tabanus': 'Bremse',
-            'Macroglossum': 'Schwärmer',
-            'Aglais': 'Schmetterling',
-            'Danaus': 'Schmetterling',
-            'Pieris': 'Schmetterling',
-            'Lucanus': 'Käfer',
-            'Photinus': 'Glühwürmchen',
+            'Macroglossum': 'Taubenschwänzchen',
+            'Aglais': 'Tagpfauenauge',
+            'Danaus': 'Monarch',
+            'Pieris': 'Weißling',
+            'Lucanus': 'Hirschkäfer',
+            'Photinus': 'Leuchtkäfer',
             'Coccinella': 'Marienkäfer',
-            'Cetonia': 'Käfer'
+            'Cetonia': 'Rosenkäfer'
         };
         
         const germanCommon = genusToGerman[genus] || insectName;
         
-        // Show as vocabulary card: Genus = simple German name
+        // Show as vocabulary card: Genus = specific German name
         const message = this.add.text(width / 2, 60, 
             `🔓 Freigeschaltet!\n${genus} = ${germanCommon}`, {
             fontSize: '26px',
