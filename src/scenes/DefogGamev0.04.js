@@ -3629,9 +3629,31 @@ export class DefogGame extends Phaser.Scene {
         const scientificName = insectEntry ? insectEntry[1].scientificName : '';
         const genus = scientificName.split(' ')[0]; // First word = genus
         
-        // Show as vocabulary card: Genus = German common name
+        // Simple genus-to-common name mapping
+        const genusToGerman = {
+            'Formica': 'Ameise',
+            'Apis': 'Biene',
+            'Bombus': 'Hummel',
+            'Vespa': 'Hornisse',
+            'Aedes': 'Mücke',
+            'Drosophila': 'Fruchtfliege',
+            'Musca': 'Fliege',
+            'Tabanus': 'Bremse',
+            'Macroglossum': 'Schwärmer',
+            'Aglais': 'Schmetterling',
+            'Danaus': 'Schmetterling',
+            'Pieris': 'Schmetterling',
+            'Lucanus': 'Käfer',
+            'Photinus': 'Glühwürmchen',
+            'Coccinella': 'Marienkäfer',
+            'Cetonia': 'Käfer'
+        };
+        
+        const germanCommon = genusToGerman[genus] || insectName;
+        
+        // Show as vocabulary card: Genus = simple German name
         const message = this.add.text(width / 2, 60, 
-            `🔓 Freigeschaltet!\n${genus} = ${insectName}`, {
+            `🔓 Freigeschaltet!\n${genus} = ${germanCommon}`, {
             fontSize: '26px',
             color: '#00ff00',
             backgroundColor: '#000000dd',
