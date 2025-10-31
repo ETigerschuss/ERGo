@@ -3624,20 +3624,30 @@ export class DefogGame extends Phaser.Scene {
     
     showUnlockMessage(insectName) {
         const width = this.scale.width;
-        const message = this.add.text(width / 2, 60, `🔓 UNLOCKED: ${insectName}!`, {
-            fontSize: '24px',
+        // Find the insect data to get scientific name
+        const insectEntry = Object.entries(INSECT_DATABASE).find(([id, data]) => data.name === insectName);
+        const scientificName = insectEntry ? insectEntry[1].scientificName : '';
+        const genus = scientificName.split(' ')[0]; // First word = genus
+        
+        // Show as vocabulary card: Genus = German common name
+        const message = this.add.text(width / 2, 60, 
+            `🔓 Freigeschaltet!\n${genus} = ${insectName}`, {
+            fontSize: '26px',
             color: '#00ff00',
             backgroundColor: '#000000dd',
-            padding: { x: 20, y: 10 },
+            padding: { x: 25, y: 15 },
             fontStyle: 'bold',
-            fontFamily: 'Arial'
+            fontFamily: 'Arial',
+            align: 'center',
+            lineSpacing: 8
         }).setOrigin(0.5).setDepth(9000).setScrollFactor(0);
         
+        // Stay visible for 5 seconds (longer for vocabulary learning)
         this.tweens.add({
             targets: message,
             y: 80,
             alpha: { from: 1, to: 0 },
-            duration: 2000,
+            duration: 5000,
             ease: 'Quad.easeOut',
             onComplete: () => message.destroy()
         });
