@@ -1,9 +1,20 @@
 import { INSECT_DATABASE, SUPERFAMILY_EMOJI, SUPERFAMILIES, UNLOCK_COSTS } from '../data/insectDatabaseReal.js';
+import { Lang } from '../data/LanguageManager.js';
+import { LanguageSelector } from '../ui/LanguageSelector.js';
 
 export class Start extends Phaser.Scene {
 
     constructor() {
         super('Start');
+        this.lang = Lang;
+        
+        // Species by family (matching game order)
+        this.speciesByFamily = [
+            ['ant', 'honeybee', 'bumblebee', 'hornet'],              // Hymenoptera
+            ['mosquito', 'vinegar_fly', 'housefly', 'horsefly'],     // Diptera
+            ['hawk_moth', 'peacock', 'monarch', 'cabbage_white'],    // Lepidoptera
+            ['stag_beetle', 'firefly', 'ladybug', 'rose_chafer']     // Coleoptera
+        ];
     }
 
     preload() {
@@ -15,39 +26,72 @@ export class Start extends Phaser.Scene {
         this.load.image('drosophila_drawing', 'assets/Drosophila melanogaster drawing.JPG');
     }
 
-    create() {
+    create(data) {
         const width = this.scale.width;
         const height = this.scale.height;
 
         // Dark background
         this.add.rectangle(0, 0, width, height, 0x0a0a14).setOrigin(0);
 
+        // Language selector (top-right corner)
+        new LanguageSelector(this, width - 50, 20);
+        
+        // Listen for language changes to refresh text
+        this.events.on('languageChanged', () => {
+            // Save current state before restarting
+            const savedState = {
+                currentState: this.currentState,
+                selectedFamily: this.selectedFamily,
+                selectedFamilyIndex: this.selectedFamilyIndex
+            };
+            this.scene.restart(savedState);
+        });
+
         // Game title
-        this.add.text(width / 2, 60, 'ERGo! v0.03-dev', {
+        this.add.text(width / 2, 60, this.lang.t('start.title'), {
             fontSize: '48px',
             color: '#ffaa00',
             fontStyle: 'bold'
         }).setOrigin(0.5);
 
-        this.add.text(width / 2, 110, 'Explore the world through insect eyes', {
+        this.add.text(width / 2, 110, this.lang.t('start.subtitle'), {
+            fontSize: '48px',
+            color: '#ffaa00',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+
+        this.subtitleText = this.add.text(width / 2, 110, this.lang.t('start.subtitle'), {
             fontSize: '18px',
             color: '#888888'
         }).setOrigin(0.5);
 
-        // State: 'familySelect' or 'speciesSelect'
-        this.currentState = 'familySelect';
-        this.selectedFamily = null;
-        this.selectedFamilyIndex = null;
+        // Restore state if coming from language change, otherwise default to family select
+        if (data && data.currentState) {
+            this.currentState = data.currentState;
+            this.selectedFamily = data.selectedFamily;
+            this.selectedFamilyIndex = data.selectedFamilyIndex;
+        } else {
+            this.currentState = 'familySelect';
+            this.selectedFamily = null;
+            this.selectedFamilyIndex = null;
+        }
 
-        // Create family selection screen
-        this.createFamilySelection(width, height);
+        // Create appropriate screen based on state
+        if (this.currentState === 'speciesSelect' && this.selectedFamily) {
+            // Restore species selection screen
+            const speciesList = this.speciesByFamily[this.selectedFamilyIndex];
+            this.createSpeciesSelection(this.selectedFamilyIndex, this.selectedFamily, speciesList);
+        } else {
+            // Show family selection screen
+            this.createFamilySelection(width, height);
+        }
     }
 
     createFamilySelection(width, height) {
         // Family selection container
         this.familyContainer = this.add.container(0, 0);
 
-        this.add.text(width / 2, 120, 'Available species', {
+        this.availableSpeciesText = this.add.text(width / 2, 120, this.lang.t('start.availableSpecies'), {
             fontSize: '28px',
             color: '#00ff00',
             fontStyle: 'bold'
@@ -197,18 +241,22 @@ export class Start extends Phaser.Scene {
 
         // Header
         const emoji = SUPERFAMILY_EMOJI[familyName];
-        const header = this.add.text(width / 2, 80, `${emoji} ${familyName}`, {
+        this.speciesHeaderText = this.add.text(width / 2, 80, `${emoji} ${familyName}`, {
             fontSize: '36px',
             color: '#ffaa00',
             fontStyle: 'bold'
         }).setOrigin(0.5);
-        this.speciesElements.push(header);
+        this.speciesElements.push(this.speciesHeaderText);
 
-        const subheader = this.add.text(width / 2, 130, 'Available to purchase (starting with 10 ⚫ monochrome):', {
+        this.speciesSubheaderText = this.add.text(width / 2, 130, this.lang.t('start.availablePurchase'), {
             fontSize: '16px',
             color: '#00ff66'
         }).setOrigin(0.5);
-        this.speciesElements.push(subheader);
+        this.speciesElements.push(this.speciesSubheaderText);
+
+        // Initialize arrays for storing text elements
+        this.speciesNameTexts = [];
+        this.speciesBioLabels = [];
 
         // Show all species with affordability indicators
         const cardWidth = 250;
@@ -248,13 +296,16 @@ export class Start extends Phaser.Scene {
             this.speciesElements.push(emojiText);
 
             // Species name
-            const nameText = this.add.text(centerX, startY + 115, insectData.name, {
+            const nameText = this.add.text(centerX, startY + 115, this.lang.t(`species.${speciesId}`) || insectData.name, {
+
                 fontSize: '16px',
                 color: '#ffffff',
                 fontStyle: 'bold',
                 align: 'center'
             }).setOrigin(0.5);
             this.speciesElements.push(nameText);
+            this.speciesNameTexts.push({ text: nameText, speciesId });
+            this.speciesNameTexts.push({ text: nameText, speciesId });
 
             const sciText = this.add.text(centerX, startY + 140, insectData.scientificName, {
                 fontSize: '11px',
@@ -267,13 +318,15 @@ export class Start extends Phaser.Scene {
             // Show biological attributes instead of costs
             const attributesText = this.formatDetailedAttributes(insectData);
             
-            const attributesLabel = this.add.text(centerX, startY + 170, 'BIOLOGICAL SPECS:', {
+            const attributesLabel = this.add.text(centerX, startY + 170, this.lang.t('start.biologicalSpecs'), {
                 fontSize: '12px',
                 color: '#ffaa00',
                 fontStyle: 'bold',
                 align: 'center'
             }).setOrigin(0.5);
             this.speciesElements.push(attributesLabel);
+            this.speciesBioLabels.push(attributesLabel);
+            this.speciesBioLabels.push(attributesLabel);
 
             const attributesDisplay = this.add.text(centerX, startY + 195, attributesText, {
                 fontSize: '11px',
@@ -287,17 +340,17 @@ export class Start extends Phaser.Scene {
         });
 
         // Back button
-        const backButton = this.add.rectangle(100, height - 60, 150, 40, 0x444444, 0.9)
-            .setStrokeStyle(2, 0x666666);
+        const backButton = this.add.rectangle(100, height - 60, 160, 50, 0x444444, 0.9)
+            .setStrokeStyle(3, 0xaaaaaa);
         backButton.setInteractive({ useHandCursor: true });
         this.speciesElements.push(backButton);
 
-        const backText = this.add.text(100, height - 60, '← Back', {
-            fontSize: '16px',
+        this.backButtonText = this.add.text(100, height - 60, this.lang.t('start.back'), {
+            fontSize: '20px',
             color: '#ffffff',
             fontStyle: 'bold'
         }).setOrigin(0.5);
-        this.speciesElements.push(backText);
+        this.speciesElements.push(this.backButtonText);
 
         backButton.on('pointerover', () => {
             backButton.setFillStyle(0x555555, 1);
@@ -317,12 +370,12 @@ export class Start extends Phaser.Scene {
         startButton.setInteractive({ useHandCursor: true });
         this.speciesElements.push(startButton);
 
-        const startText = this.add.text(width - 100, height - 60, 'START GAME ▶', {
+        this.startButtonText = this.add.text(width - 100, height - 60, this.lang.t('start.startGame'), {
             fontSize: '18px',
             color: '#ffffff',
             fontStyle: 'bold'
         }).setOrigin(0.5);
-        this.speciesElements.push(startText);
+        this.speciesElements.push(this.startButtonText);
 
         startButton.on('pointerover', () => {
             startButton.setFillStyle(0x00cc55, 1);
@@ -411,6 +464,52 @@ export class Start extends Phaser.Scene {
         // Reset selection
         this.selectedFamily = null;
         this.selectedFamilyIndex = null;
+    }
+
+    refreshAllText() {
+        // Update title/subtitle if visible
+        if (this.titleText) {
+            this.titleText.setText(this.lang.t('start.title'));
+        }
+        if (this.subtitleText) {
+            this.subtitleText.setText(this.lang.t('start.subtitle'));
+        }
+
+        // Update family selection screen if visible
+        if (this.availableSpeciesText) {
+            this.availableSpeciesText.setText(this.lang.t('start.availableSpecies'));
+        }
+
+        // Update species selection screen if visible
+        if (this.speciesHeaderText && this.selectedFamily) {
+            const emoji = SUPERFAMILY_EMOJI[this.selectedFamily];
+            this.speciesHeaderText.setText(`${emoji} ${this.selectedFamily}`);
+        }
+        if (this.speciesSubheaderText) {
+            this.speciesSubheaderText.setText(this.lang.t('start.availablePurchase'));
+        }
+
+        // Update species card names
+        if (this.speciesNameTexts && this.speciesNameTexts.length > 0) {
+            this.speciesNameTexts.forEach(({ text, speciesId }) => {
+                text.setText(this.lang.t(`species.${speciesId}`));
+            });
+        }
+
+        // Update biological specs labels
+        if (this.speciesBioLabels && this.speciesBioLabels.length > 0) {
+            this.speciesBioLabels.forEach(label => {
+                label.setText(this.lang.t('start.biologicalSpecs'));
+            });
+        }
+
+        // Update button texts
+        if (this.backButtonText) {
+            this.backButtonText.setText(this.lang.t('start.back'));
+        }
+        if (this.startButtonText) {
+            this.startButtonText.setText(this.lang.t('start.startGame'));
+        }
     }
 
     startGame(familyIndex) {

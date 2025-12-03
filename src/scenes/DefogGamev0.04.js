@@ -2,10 +2,14 @@ import { INSECT_DATABASE, SUPERFAMILY_EMOJI, COLOR_CHANNELS, SUPERFAMILIES, getI
 import { CurrencySystem } from '../systems/Currency.js';
 import { CollectibleSystem } from '../systems/Collectible.js';
 
+import { Lang } from '../data/LanguageManager.js';
+import { LanguageSelector } from '../ui/LanguageSelector.js';
+
 export class DefogGame extends Phaser.Scene {
 
     constructor() {
         super('DefogGame');
+        this.lang = Lang; // Language manager instance
     }
 
     init(data) {
@@ -196,8 +200,16 @@ export class DefogGame extends Phaser.Scene {
         // this.startSpawnTimer(15);
         console.log('⚠️ Automatic spawning disabled - click species boxes to unlock/spawn');
 
+        // Language selector (top-right corner, high depth to be above everything)
+        new LanguageSelector(this, width - 50, 20);
+        
+        // Listen for language changes - refresh text without restarting
+        this.events.on('languageChanged', () => {
+            this.refreshGameText();
+        });
+
         // Anweisungen (in zwei Zeilen aufgeteilt für bessere Lesbarkeit)
-        this.add.text(width / 2, 12, 'Klicke auf Art-Box um Insekten freizuschalten | Klicke auf Insekt zum Auswählen, klicke um Pfad zu setzen', {
+        this.instructionLine1 = this.add.text(width / 2, 12, this.lang.t('instructions.line1'), {
             fontSize: '12px',
             color: '#ffffff',
             backgroundColor: '#000000dd',
@@ -205,7 +217,7 @@ export class DefogGame extends Phaser.Scene {
             align: 'center'
         }).setOrigin(0.5).setDepth(3000);
         
-        this.add.text(width / 2, 28, 'Mini-Emojis wählen Insekten | Klicke auf leeren Bereich um alle Insekten zu befehligen', {
+        this.instructionLine2 = this.add.text(width / 2, 28, this.lang.t('instructions.line2'), {
             fontSize: '12px',
             color: '#ffffff',
             backgroundColor: '#000000dd',
@@ -916,7 +928,7 @@ export class DefogGame extends Phaser.Scene {
             .setStrokeStyle(3, 0x00ff00);
         
         // Title
-        const title = this.add.text(dialogX, dialogY - 100, `Unlock ${insectData.name}?`, {
+        const title = this.add.text(dialogX, dialogY - 100, this.lang.t('purchase.unlockQuestion', { name: insectData.name }), {
             fontSize: '28px',
             color: '#00ff00',
             fontStyle: 'bold',
@@ -953,7 +965,7 @@ export class DefogGame extends Phaser.Scene {
             .setInteractive({ useHandCursor: true })
             .setStrokeStyle(2, 0x00ff00);
         
-        const confirmText = this.add.text(dialogX - 80, buttonY, 'UNLOCK', {
+        const confirmText = this.add.text(dialogX - 80, buttonY, this.lang.t('buttons.unlock'), {
             fontSize: '20px',
             color: '#ffffff',
             fontStyle: 'bold',
@@ -966,7 +978,7 @@ export class DefogGame extends Phaser.Scene {
             .setInteractive({ useHandCursor: true })
             .setStrokeStyle(2, 0xff0000);
         
-        const cancelText = this.add.text(dialogX + 80, buttonY, 'CANCEL', {
+        const cancelText = this.add.text(dialogX + 80, buttonY, this.lang.t('buttons.cancel'), {
             fontSize: '20px',
             color: '#ffffff',
             fontStyle: 'bold',
@@ -3624,36 +3636,18 @@ export class DefogGame extends Phaser.Scene {
     
     showUnlockMessage(insectName) {
         const width = this.scale.width;
-        // Find the insect data to get scientific name
+        // Find the insect data to get scientific name and ID
         const insectEntry = Object.entries(INSECT_DATABASE).find(([id, data]) => data.name === insectName);
+        const insectId = insectEntry ? insectEntry[0] : null;
         const scientificName = insectEntry ? insectEntry[1].scientificName : '';
         const genus = scientificName.split(' ')[0]; // First word = genus
         
-        // Specific genus-to-German mapping (as precise as possible)
-        const genusToGerman = {
-            'Formica': 'Waldameise',
-            'Apis': 'Honigbiene',
-            'Bombus': 'Hummel',
-            'Vespa': 'Hornisse',
-            'Aedes': 'Tigermücke',
-            'Drosophila': 'Taufliege',
-            'Musca': 'Stubenfliege',
-            'Tabanus': 'Bremse',
-            'Macroglossum': 'Taubenschwänzchen',
-            'Aglais': 'Tagpfauenauge',
-            'Danaus': 'Monarch',
-            'Pieris': 'Weißling',
-            'Lucanus': 'Hirschkäfer',
-            'Photinus': 'Leuchtkäfer',
-            'Coccinella': 'Marienkäfer',
-            'Cetonia': 'Rosenkäfer'
-        };
+        // Get translated common name
+        const translatedName = insectId ? this.lang.t(`species.${insectId}`) : insectName;
         
-        const germanCommon = genusToGerman[genus] || insectName;
-        
-        // Show as vocabulary card: Genus = specific German name
+        // Show as vocabulary card: Genus = translated common name
         const message = this.add.text(width / 2, 60, 
-            `🔓 Freigeschaltet!\n${genus} = ${germanCommon}`, {
+            `🔓 ${this.lang.t('unlock.species', { name: genus })}\n${genus} = ${translatedName}`, {
             fontSize: '26px',
             color: '#00ff00',
             backgroundColor: '#000000dd',
@@ -3716,7 +3710,7 @@ export class DefogGame extends Phaser.Scene {
         const width = this.scale.width;
         
         const message = this.add.text(width / 2, 60, 
-            `⏸️ ${speciesName} are still alive!\nWait for them to die before spawning more.`, {
+            `⏸️ ${this.lang.t('messages.speciesActiveTitle', { name: speciesName })}\n${this.lang.t('messages.speciesActiveBody')}`, {
             fontSize: '20px',
             color: '#ffaa00',
             backgroundColor: '#000000dd',
@@ -3741,7 +3735,7 @@ export class DefogGame extends Phaser.Scene {
         const familyEmoji = SUPERFAMILY_EMOJI[family] || '🐛';
         
         const message = this.add.text(width / 2, 60, 
-            `🚫 ${familyEmoji} Family ${family} occupied!\n${activeSpeciesName} are still active.`, {
+            `🚫 ${familyEmoji} ${this.lang.t('messages.familyBlockedTitle')}\n${this.lang.t('messages.familyBlockedBody', { family, species: activeSpeciesName })}`, {
             fontSize: '20px',
             color: '#ff6666',
             backgroundColor: '#000000dd',
@@ -3864,7 +3858,7 @@ export class DefogGame extends Phaser.Scene {
         }
         
         const message = this.add.text(width / 2, 60, 
-            `❌ Need more resources for ${insectData.name}:\n${missing.join(', ')}`, {
+            `❌ ${this.lang.t('messages.insufficientTitle')}\n${this.lang.t('messages.insufficientBody')} ${missing.join(', ')}`, {
             fontSize: '18px',
             color: '#ff4444',
             backgroundColor: '#000000dd',
@@ -3899,7 +3893,7 @@ export class DefogGame extends Phaser.Scene {
             .setScrollFactor(0);
         
         // Timer title
-        this.timerTitle = this.add.text(timerX, timerY - 35, 'Time', {
+        this.timerTitle = this.add.text(timerX, timerY - 35, this.lang.t('timer.time'), {
             fontSize: '14px',
             color: '#ffffff',
             fontStyle: 'bold',
@@ -3921,7 +3915,7 @@ export class DefogGame extends Phaser.Scene {
             .setScrollFactor(0)
             .setInteractive({ useHandCursor: true });
         
-        this.restartLevelButtonText = this.add.text(timerX, timerY + 20, 'Restart Level', {
+        this.restartLevelButtonText = this.add.text(timerX, timerY + 20, this.lang.t('buttons.retry'), {
             fontSize: '13px',
             color: '#ffffff',
             fontStyle: 'bold',
@@ -3949,7 +3943,7 @@ export class DefogGame extends Phaser.Scene {
             .setInteractive({ useHandCursor: true })
             .setVisible(false);
         
-        this.finishLevelButtonText = this.add.text(timerX, timerY + 50, 'Level Beenden', {
+        this.finishLevelButtonText = this.add.text(timerX, timerY + 50, this.lang.t('timer.completed'), {
             fontSize: '13px',
             color: '#ffffff',
             fontStyle: 'bold',
@@ -4055,8 +4049,8 @@ export class DefogGame extends Phaser.Scene {
         
         // Title with NEW BEST indicator
         const titleText = isNewBest 
-            ? `🏆 LEVEL ${this.currentLevel} - NEW BEST TIME! 🏆`
-            : `✅ LEVEL ${this.currentLevel} COMPLETE!`;
+            ? `🏆 ${this.lang.t('timer.level', { num: this.currentLevel }).toUpperCase()} - ${this.lang.t('timer.newBestTime')} 🏆`
+            : `✅ ${this.lang.t('timer.level', { num: this.currentLevel }).toUpperCase()} ${this.lang.t('timer.completed').toUpperCase()}`;
         
         const message = this.add.text(width / 2, height / 2 - 140, 
             titleText, {
@@ -4071,7 +4065,7 @@ export class DefogGame extends Phaser.Scene {
         
         // Current time
         const timeText = this.add.text(width / 2, height / 2 - 70,
-            `Your Time: ${this.formatTime(this.finalTime)}`, {
+            this.lang.t('timer.yourTime', { time: this.formatTime(this.finalTime) }), {
             fontSize: '32px',
             color: '#ffffff',
             fontFamily: 'Arial',
@@ -4081,9 +4075,9 @@ export class DefogGame extends Phaser.Scene {
         // Best time info
         let bestInfoText = '';
         if (isNewBest) {
-            bestInfoText = '✨ New personal record! ✨';
+            bestInfoText = this.lang.t('timer.newRecord');
         } else {
-            bestInfoText = `Best Time: ${this.formatTime(currentBest.time)}`;
+            bestInfoText = this.lang.t('timer.bestTime', { time: this.formatTime(currentBest.time) });
         }
         
         const bestText = this.add.text(width / 2, height / 2 - 30,
@@ -4096,7 +4090,7 @@ export class DefogGame extends Phaser.Scene {
         
         // Date achieved
         const dateText = this.add.text(width / 2, height / 2 + 5,
-            `Achieved: ${currentBest.dateFormatted}`, {
+            this.lang.t('timer.achieved', { date: currentBest.dateFormatted }), {
             fontSize: '16px',
             color: '#888888',
             fontFamily: 'Arial'
@@ -4105,7 +4099,7 @@ export class DefogGame extends Phaser.Scene {
         // Progress indicator
         const completedLevels = Object.values(this.highScores.levels).filter(l => l !== null).length;
         const progressText = this.add.text(width / 2, height / 2 + 40,
-            `Levels Completed: ${completedLevels}/5`, {
+            this.lang.t('timer.levelsCompleted', { count: completedLevels }), {
             fontSize: '22px',
             color: '#ffaa00',
             fontFamily: 'Arial'
@@ -4133,7 +4127,7 @@ export class DefogGame extends Phaser.Scene {
         
         // Diamond content - show this level's best with diamond score
         const diamondTitle = this.add.text(diamondX, diamondY - 65,
-            `💎 LEVEL ${this.currentLevel} 💎`, {
+            this.lang.t('highScore.diamondTitle', { num: this.currentLevel }), {
             fontSize: '20px',
             color: '#FFD700',
             fontFamily: 'Arial',
@@ -4149,7 +4143,7 @@ export class DefogGame extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(10002).setScrollFactor(0);
         
         const diamondBestTime = this.add.text(diamondX, diamondY,
-            `Time: ${this.formatTime(currentBest.time)}`, {
+            this.lang.t('highScore.timeLabel', { time: this.formatTime(currentBest.time) }), {
             fontSize: '18px',
             color: '#ffffff',
             fontFamily: 'Arial',
@@ -4173,7 +4167,7 @@ export class DefogGame extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(10002).setScrollFactor(0);
         
         const diamondComplete = this.add.text(diamondX, diamondY + 75,
-            `✓ ${completedLevels}/5 Complete`, {
+            this.lang.t('highScore.complete', { count: completedLevels }), {
             fontSize: '16px',
             color: '#00ff00',
             fontFamily: 'Arial'
@@ -4185,7 +4179,7 @@ export class DefogGame extends Phaser.Scene {
         if (allLevelsCompleted && !hasNextLevel) {
             // Show "View Final Reward" button
             const rewardButton = this.add.text(width / 2, buttonsY,
-                '🎁 View Final Reward 🎁', {
+                this.lang.t('timer.viewReward'), {
                 fontSize: '32px',
                 color: '#ffffff',
                 backgroundColor: '#FFD700',
@@ -4240,7 +4234,7 @@ export class DefogGame extends Phaser.Scene {
         } else if (hasNextLevel) {
             // Next Level button
             const nextLevelButton = this.add.text(width / 2, buttonsY,
-                `▶ Nächstes Level (${nextLevel})`, {
+                this.lang.t('timer.nextLevel', { num: nextLevel }), {
                 fontSize: '32px',
                 color: '#ffffff',
                 backgroundColor: '#00aa00',
@@ -4327,7 +4321,7 @@ export class DefogGame extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
         
         // Title
-        const title = this.add.text(width / 2, 140, `💎 Level ${this.currentLevel} Complete! 💎`, {
+        const title = this.add.text(width / 2, 140, this.lang.t('timer.diamondTitle', { num: this.currentLevel }), {
             fontSize: '48px',
             color: '#ffaa00',
             fontStyle: 'bold',
@@ -4367,7 +4361,7 @@ export class DefogGame extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
         
         // Total diamonds display
-        const totalText = this.add.text(width / 2, 380, `Total: 0 💎`, {
+        const totalText = this.add.text(width / 2, 380, this.lang.t('timer.total', { amount: 0 }), {
             fontSize: '40px',
             color: '#ffaa00',
             fontStyle: 'bold',
@@ -4386,7 +4380,7 @@ export class DefogGame extends Phaser.Scene {
                 .setScrollFactor(0)
                 .setAlpha(0);
             
-            nextButtonText = this.add.text(width / 2 - 120, nextButtonY, '🎁 Final Reward', {
+            nextButtonText = this.add.text(width / 2 - 120, nextButtonY, this.lang.t('buttons.finalReward'), {
                 fontSize: '24px',
                 color: '#000000',
                 fontStyle: 'bold',
@@ -4400,7 +4394,7 @@ export class DefogGame extends Phaser.Scene {
                 .setScrollFactor(0)
                 .setAlpha(0);
             
-            nextButtonText = this.add.text(width / 2 - 120, nextButtonY, `▶ Level ${nextLevel}`, {
+            nextButtonText = this.add.text(width / 2 - 120, nextButtonY, this.lang.t('buttons.nextLevel', { num: nextLevel }), {
                 fontSize: '24px',
                 color: '#ffffff',
                 fontStyle: 'bold',
@@ -4415,7 +4409,7 @@ export class DefogGame extends Phaser.Scene {
             .setScrollFactor(0)
             .setAlpha(0);
         
-        const highscoresText = this.add.text(width / 2 + 120, nextButtonY, '📊 Bestenliste', {
+        const highscoresText = this.add.text(width / 2 + 120, nextButtonY, this.lang.t('buttons.highscores'), {
             fontSize: '20px',
             color: '#ffffff',
             fontStyle: 'bold',
@@ -4576,7 +4570,7 @@ export class DefogGame extends Phaser.Scene {
         overlay.setDepth(10000);
 
         // Title
-        const title = this.add.text(width / 2, 50, `📋 Level ${this.currentLevel} - Spielanleitung`, {
+        const title = this.add.text(width / 2, 50, `📋 ${this.lang.t('intro.title')} - ${this.lang.t('timer.level', { num: this.currentLevel })}`, {
             fontSize: '40px',
             fontFamily: 'Arial',
             color: '#ffdd00',
@@ -4586,7 +4580,7 @@ export class DefogGame extends Phaser.Scene {
         title.setDepth(10001);
 
         // Explanation header
-        const explainHeader = this.add.text(width / 2, 110, '🧬 Über Rhodopsine & Farbempfindlichkeiten:', {
+        const explainHeader = this.add.text(width / 2, 110, `🧬 ${this.lang.t('intro.objective')}`, {
             fontSize: '22px',
             fontFamily: 'Arial',
             color: '#00ffff',
@@ -4595,7 +4589,7 @@ export class DefogGame extends Phaser.Scene {
         explainHeader.setOrigin(0.5);
         explainHeader.setDepth(10001);
 
-        const explainText = this.add.text(width / 2, 145, 'Insekten enthüllen das Bild und sammeln Rhodopsine (⚫🔴🟢🔵)\nbasierend auf ihrer Farbempfindlichkeit. Nutze Rhodopsine um neue Arten freizuschalten!', {
+        const explainText = this.add.text(width / 2, 145, this.lang.t('intro.objectiveText'), {
             fontSize: '16px',
             fontFamily: 'Arial',
             color: '#aaaaaa',
@@ -4606,7 +4600,7 @@ export class DefogGame extends Phaser.Scene {
         explainText.setDepth(10001);
 
         // Rule 1
-        const rule1 = this.add.text(width / 2, 200, '⏱️ Schalte alle 16 Arten so schnell wie möglich frei', {
+        const rule1 = this.add.text(width / 2, 200, `⏱️ ${this.lang.t('intro.rule1')}`, {
             fontSize: '22px',
             fontFamily: 'Arial',
             color: '#ffffff',
@@ -4615,7 +4609,7 @@ export class DefogGame extends Phaser.Scene {
         rule1.setOrigin(0.5);
         rule1.setDepth(10001);
 
-        const rule1sub = this.add.text(width / 2, 225, 'um Zeitbonus-Diamanten zu verdienen!', {
+        const rule1sub = this.add.text(width / 2, 225, this.lang.t('intro.rule1sub'), {
             fontSize: '16px',
             fontFamily: 'Arial',
             color: '#aaaaaa'
@@ -4624,7 +4618,7 @@ export class DefogGame extends Phaser.Scene {
         rule1sub.setDepth(10001);
 
         // Rule 2
-        const rule2 = this.add.text(width / 2, 265, '🖼️ Enthülle so viel vom Bild wie möglich', {
+        const rule2 = this.add.text(width / 2, 265, `🖼️ ${this.lang.t('intro.rule2')}`, {
             fontSize: '22px',
             fontFamily: 'Arial',
             color: '#ffffff',
@@ -4633,7 +4627,7 @@ export class DefogGame extends Phaser.Scene {
         rule2.setOrigin(0.5);
         rule2.setDepth(10001);
 
-        const rule2sub = this.add.text(width / 2, 290, 'um Rhodopsine in Diamanten zu verwandeln!', {
+        const rule2sub = this.add.text(width / 2, 290, this.lang.t('intro.rule2sub'), {
             fontSize: '16px',
             fontFamily: 'Arial',
             color: '#aaaaaa'
@@ -4642,7 +4636,7 @@ export class DefogGame extends Phaser.Scene {
         rule2sub.setDepth(10001);
 
         // Rule 3
-        const rule3 = this.add.text(width / 2, 330, '🚫 Nur 1 Art pro Familie erlaubt', {
+        const rule3 = this.add.text(width / 2, 330, `🚫 ${this.lang.t('intro.rule4')}`, {
             fontSize: '22px',
             fontFamily: 'Arial',
             color: '#ffffff',
@@ -4651,7 +4645,7 @@ export class DefogGame extends Phaser.Scene {
         rule3.setOrigin(0.5);
         rule3.setDepth(10001);
 
-        const rule3sub = this.add.text(width / 2, 355, 'Warte bis die Art verschwindet bevor du eine andere aus derselben Familie erzeugst', {
+        const rule3sub = this.add.text(width / 2, 355, this.lang.t('intro.rule3sub'), {
             fontSize: '16px',
             fontFamily: 'Arial',
             color: '#aaaaaa'
@@ -4660,7 +4654,7 @@ export class DefogGame extends Phaser.Scene {
         rule3sub.setDepth(10001);
 
         // Rule 4
-        const rule4 = this.add.text(width / 2, 395, '⚠️ Maximal 3 Arten gleichzeitig aktiv', {
+        const rule4 = this.add.text(width / 2, 395, `⚠️ ${this.lang.t('error.speciesLimit')}`, {
             fontSize: '22px',
             fontFamily: 'Arial',
             color: '#ffffff',
@@ -4669,7 +4663,7 @@ export class DefogGame extends Phaser.Scene {
         rule4.setOrigin(0.5);
         rule4.setDepth(10001);
 
-        const rule4sub = this.add.text(width / 2, 420, 'Wähle deine Strategie weise!', {
+        const rule4sub = this.add.text(width / 2, 420, this.lang.t('intro.rule4sub'), {
             fontSize: '16px',
             fontFamily: 'Arial',
             color: '#aaaaaa'
@@ -4683,7 +4677,7 @@ export class DefogGame extends Phaser.Scene {
         startButton.setDepth(10001);
         startButton.setInteractive({ useHandCursor: true });
 
-        const startButtonText = this.add.text(width / 2, buttonY, '▶ LEVEL STARTEN', {
+        const startButtonText = this.add.text(width / 2, buttonY, `▶ ${this.lang.t('buttons.start')}`, {
             fontSize: '28px',
             fontFamily: 'Arial',
             color: '#ffffff',
@@ -4812,10 +4806,10 @@ export class DefogGame extends Phaser.Scene {
             callback: () => {
                 step++;
                 currentTotal = Math.min(finalTotal, Math.floor(increment * step));
-                textObject.setText(`Total: ${currentTotal} 💎`);
+                textObject.setText(this.lang.t('timer.total', { amount: currentTotal }));
                 
                 if (step >= steps) {
-                    textObject.setText(`Total: ${finalTotal} 💎`);
+                    textObject.setText(this.lang.t('timer.total', { amount: finalTotal }));
                 }
             }
         });
@@ -4836,7 +4830,7 @@ export class DefogGame extends Phaser.Scene {
         overlay.setDepth(20000);
         
         // Title
-        const title = this.add.text(width / 2, 100, `LEVEL ${level} COMPLETE!`, {
+        const title = this.add.text(width / 2, 100, `${this.lang.t('timer.level', { num: level })} ${this.lang.t('timer.completed')}`.toUpperCase(), {
             fontFamily: 'Orbitron, sans-serif',
             fontSize: '48px',
             fontStyle: 'bold',
@@ -4849,7 +4843,7 @@ export class DefogGame extends Phaser.Scene {
         
         // Subtitle with rank
         const rankColor = playerRank === 1 ? '#FFD700' : playerRank === 2 ? '#C0C0C0' : playerRank === 3 ? '#CD7F32' : '#00ff88';
-        const subtitle = this.add.text(width / 2, 160, `YOUR RANK: #${playerRank}`, {
+        const subtitle = this.add.text(width / 2, 160, this.lang.t('timer.yourRank', { rank: playerRank }), {
             fontFamily: 'Orbitron, sans-serif',
             fontSize: '32px',
             fontStyle: 'bold',
@@ -4879,7 +4873,7 @@ export class DefogGame extends Phaser.Scene {
             }
             
             // Display: #1 PlayerName - 3:45 (2500💎)
-            const nameText = isPlayer ? `${score.playerName} (you)` : score.playerName;
+            const nameText = isPlayer ? `${score.playerName} ${this.lang.t('timer.you')}` : score.playerName;
             const text = this.add.text(width / 2, yPos, 
                 `#${rank}  ${nameText} - ${this.formatTime(score.time)} (${score.diamonds}💎)`, {
                 fontFamily: 'Orbitron, sans-serif',
@@ -4904,7 +4898,7 @@ export class DefogGame extends Phaser.Scene {
             bg.setDepth(20000);
             
             const text = this.add.text(width / 2, yPos, 
-                `#${playerRank}  ${playerScore.playerName} (you) - ${this.formatTime(playerScore.time)} (${playerScore.diamonds}💎)`, {
+                `#${playerRank}  ${playerScore.playerName} ${this.lang.t('timer.you')} - ${this.formatTime(playerScore.time)} (${playerScore.diamonds}💎)`, {
                 fontFamily: 'Orbitron, sans-serif',
                 fontSize: '24px',
                 fontStyle: 'bold',
@@ -4917,7 +4911,7 @@ export class DefogGame extends Phaser.Scene {
         }
         
         // Close button
-        const closeButton = this.add.text(width / 2, height - 100, 'CONTINUE', {
+        const closeButton = this.add.text(width / 2, height - 100, this.lang.t('buttons.continue'), {
             fontFamily: 'Orbitron, sans-serif',
             fontSize: '28px',
             fontStyle: 'bold',
@@ -5544,7 +5538,7 @@ export class DefogGame extends Phaser.Scene {
         
         // Title
         const title = this.add.text(width / 2, 50, 
-            '🎉 CONGRATULATIONS! 🎉', {
+            this.lang.t('finalReward.title'), {
             fontSize: '56px',
             color: '#FFD700',
             fontStyle: 'bold',
@@ -5555,7 +5549,7 @@ export class DefogGame extends Phaser.Scene {
         
         // Subtitle
         const subtitle = this.add.text(width / 2, 120, 
-            'You completed all 5 levels!', {
+            this.lang.t('finalReward.message'), {
             fontSize: '32px',
             color: '#00ff00',
             fontFamily: 'Arial'
@@ -5572,7 +5566,7 @@ export class DefogGame extends Phaser.Scene {
         const totalTime = this.getTotalTime();
         const totalDiamonds = this.getTotalDiamonds();
         const totalText = this.add.text(width / 2, height / 2 + 200, 
-            `🏆 Total: ${this.formatTime(totalTime)} | ${totalDiamonds}💎 🏆`, {
+            this.lang.t('finalReward.total', { time: this.formatTime(totalTime), diamonds: totalDiamonds }), {
             fontSize: '32px',
             color: '#FFD700',
             fontStyle: 'bold',
@@ -5637,7 +5631,7 @@ export class DefogGame extends Phaser.Scene {
         
         // Play Again button
         const playAgainButton = this.add.text(width / 2, height - 60,
-            '▶ Play All Levels Again', {
+            this.lang.t('finalReward.playAgain'), {
             fontSize: '28px',
             color: '#ffffff',
             backgroundColor: '#0066cc',
@@ -5685,5 +5679,40 @@ export class DefogGame extends Phaser.Scene {
             ease: 'Power2'
         });
     }
+
+    refreshGameText() {
+        // Update instruction texts at top
+        if (this.instructionLine1) {
+            this.instructionLine1.setText(this.lang.t('instructions.line1'));
+        }
+        if (this.instructionLine2) {
+            this.instructionLine2.setText(this.lang.t('instructions.line2'));
+        }
+
+        // Update timer UI texts
+        if (this.timerTitle) {
+            this.timerTitle.setText(this.lang.t('timer.time'));
+        }
+        if (this.restartLevelButtonText) {
+            this.restartLevelButtonText.setText(this.lang.t('buttons.retry'));
+        }
+        if (this.finishLevelButtonText) {
+            this.finishLevelButtonText.setText(this.lang.t('timer.completed'));
+        }
+
+        // Update species box names with translated species names
+        if (this.selectedInsects && this.selectedInsects.length > 0) {
+            this.selectedInsects.forEach((insectId, index) => {
+                const speciesBox = this.children.list.find(child => 
+                    child.boxIndex === index && child.nameText
+                );
+                if (speciesBox && speciesBox.nameText) {
+                    const translatedName = this.lang.t(`species.${insectId}`);
+                    speciesBox.nameText.setText(translatedName);
+                }
+            });
+        }
+    }
 }
+
 
